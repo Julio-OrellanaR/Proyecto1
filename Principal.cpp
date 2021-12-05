@@ -15,6 +15,98 @@
 #include <algorithm>
 using namespace std;
 
+//-- ESTRUCTURAS
+//-- PARTITION --
+struct PARTITION
+{
+    char part_status;
+    char part_type = 'P';
+    string part_fit = "FF";
+    int part_start;
+    int part_size;
+    char part_name[16];
+};
+
+
+//-- MASTER BOOT RECORD -- MBR
+struct MBR
+{
+    int MBR_tamanio;
+    time_t MBR_fecha_creacion;
+    int MBR_disk_signature;
+    string disk_fit="FF";
+    PARTITION MBR_partition[4];
+};
+
+//-- DISCO --
+struct DISCO
+{   
+    int size;
+    string fit;
+    char unit = 'm'; // k= kilobytes, m= Megabytes
+    string path;
+}Discvar;
+
+//-- CREACION DISCO --
+void crearDisco(DISCO dc){
+    cout<< "-----creacion disco------" << endl;
+    string ruta = dc.path;
+    char rutac[ruta.size()+1];
+    strcpy(rutac, ruta.c_str());
+
+    FILE *file = NULL;
+    file = fopen(rutac, "r");
+    if (file != NULL)
+    {
+        cout << "Ya existe el disco" << endl;
+        return;
+    }
+
+    int tamanio;
+
+    if (dc.unit == 'k') //kilobyte
+    {
+        tamanio = 1024 * dc.size;
+    }else{  //megabyte
+        tamanio == 1024 * 1024 * dc.size;
+    }
+
+    file = fopen(rutac, "wb");
+    fwrite("\0",1,1,file);
+
+    fseek(file, tamanio, SEEK_SET);
+    fwrite("\0", 1, 1, file);
+    
+    //se completo la retencion del disco, ahora modificamos el MBR
+
+    MBR mbr;
+    mbr.MBR_tamanio = tamanio;
+    mbr.MBR_disk_signature = rand()%1000;
+    mbr.MBR_fecha_creacion = time(0);
+
+    for (int i = 0; i < 4; i++)
+    {
+        mbr.MBR_partition[i].part_status = '0';
+        mbr.MBR_partition[i].part_size = 0;
+        mbr.MBR_partition[i].part_fit = "FF";
+        mbr.MBR_partition[i].part_start = tamanio;
+        strcpy(mbr.MBR_partition[i].part_name, "");
+    }
+
+    cout << "---- Disco Creado  ----" << "\n Disco \n" <<endl;
+    cout << "fecha creacion: " << asctime(gmtime(&mbr.MBR_fecha_creacion)) << endl;
+    cout << "Signature: " << mbr.MBR_disk_signature << endl;
+    cout << "Tamaño: " << mbr.MBR_tamanio <<endl;
+    cout << "Fit: " << mbr.disk_fit << endl;
+
+    //escritura del mbr
+    fseek(file, 0, SEEK_SET);
+    fwrite(&mbr, sizeof(MBR), 1, file);
+    fclose(file);
+}
+
+
+
 //--Existencia vector--
 bool existeEnVector(vector<string> v, string busqueda) {
     return find(v.begin(), v.end(), busqueda) != v.end();
@@ -88,7 +180,6 @@ vector<string> splitParam(string linea){
 void MKDISK(vector<string> datos){
     cout << "estamos en mkdisk" << endl;
 
-
     for (int i = 1; i < datos.size(); i++)
     {   
         vector<string> tipoP;
@@ -105,20 +196,38 @@ void MKDISK(vector<string> datos){
             }
         }else{
             string coman = minusculas(tipoP[0]);
+            string datoComan = tipoP[2];
             if (coman == "-size")
             {
+                Discvar.size = stoi(datoComan);
                 cout << "size: " << tipoP.at(2) << endl;
 
             }else if (coman == "-fit")
             {
+                Discvar.fit = datoComan;
                 cout << "fit: " << tipoP.at(2) << endl;
 
             }else if (coman == "-unit")
             {
+                string pal = minusculas(datoComan);
+                if (pal == "k")
+                {
+                    Discvar.unit = 'k';
+
+                }else if (pal == "m")
+                {
+                    Discvar.unit = 'm';
+
+                }else{
+                    cout<< "error" << endl;
+                }
+                
+                
                 cout << "unit: " << tipoP.at(2) << endl;
 
             }else if (coman == "-path")
             {
+                Discvar.path = datoComan;
                 cout << "path: " << tipoP.at(2) << endl;
             }else{
                 cout << "comando Invalido" << endl;
@@ -126,7 +235,7 @@ void MKDISK(vector<string> datos){
             }
         }
     }
-    
+    crearDisco(Discvar);
 }
 
 //-- RMDISK --
