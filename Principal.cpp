@@ -9,8 +9,10 @@
 #include <time.h>
 #include <fstream>
 #include <string>
+#include <ctype.h>
+#include <cctype>
 #include <bits/stdc++.h>
-#include<algorithm>
+#include <algorithm>
 using namespace std;
 
 //--Existencia vector--
@@ -86,6 +88,7 @@ vector<string> splitParam(string linea){
 void MKDISK(vector<string> datos){
     cout << "estamos en mkdisk" << endl;
 
+
     for (int i = 1; i < datos.size(); i++)
     {   
         vector<string> tipoP;
@@ -100,12 +103,28 @@ void MKDISK(vector<string> datos){
                 cout << "Falta el simbolo :, omitimos linea" << endl;
                 break;
             }
-            
         }else{
-            cout << "extraje pos 0: " << tipoP.at(0) << " !pos 1: " << tipoP.at(2) << endl;
+            string coman = minusculas(tipoP[0]);
+            if (coman == "-size")
+            {
+                cout << "size: " << tipoP.at(2) << endl;
+
+            }else if (coman == "-fit")
+            {
+                cout << "fit: " << tipoP.at(2) << endl;
+
+            }else if (coman == "-unit")
+            {
+                cout << "unit: " << tipoP.at(2) << endl;
+
+            }else if (coman == "-path")
+            {
+                cout << "path: " << tipoP.at(2) << endl;
+            }else{
+                cout << "comando Invalido" << endl;
+                break;
+            }
         }
-        
-        cout << i << ") "<< datos.at(i) << endl;
     }
     
 }
