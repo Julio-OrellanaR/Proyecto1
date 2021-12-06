@@ -13,6 +13,8 @@
 #include <cctype>
 #include <bits/stdc++.h>
 #include <algorithm>
+#include <sys/stat.h>
+#include <sys/types.h>
 using namespace std;
 
 //-- ESTRUCTURAS
@@ -176,6 +178,19 @@ vector<string> splitParam(string linea){
     
 }
 
+int BorrarDisco(string path){
+    if(remove(path.c_str()) != 0 )
+    {
+        perror("Error al borrar archivo!.");
+        return 1;
+    }
+    else{
+        puts("El archivo se borro con exito!");
+        return 0;
+    }
+    return 0;
+}
+
 //-- MKDISK --
 void MKDISK(vector<string> datos){
     cout << "estamos en mkdisk" << endl;
@@ -228,6 +243,15 @@ void MKDISK(vector<string> datos){
             }else if (coman == "-path")
             {
                 Discvar.path = datoComan;
+
+                /*if (mkdir(datoComan.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0)
+                {
+                    cout << "creada correctamente" << endl;
+                }else{
+                    cout << "no se creo" << endl;
+                }*/
+                
+                //TODO: hacer la pinche ruta
                 cout << "path: " << tipoP.at(2) << endl;
             }else{
                 cout << "comando Invalido" << endl;
@@ -241,6 +265,33 @@ void MKDISK(vector<string> datos){
 //-- RMDISK --
 void RMDISK(vector<string> datos){
     cout << "estamos en rmdisk" << endl;
+
+    for (int i = 1; i < datos.size(); i++)
+    {
+        vector<string> tipoP;
+        cout << datos[i] << endl;
+        tipoP = splitParam(datos.at(i));
+        if (tipoP.at(0) == "SIN SIMBOLO" || tipoP.at(0) == "SIN PUNTOS")
+        {
+            if (tipoP.at(0) == "SIN SIMBOLO")
+            {
+                cout << "Falta el simbolo ~, omitimos linea" << endl;
+                break;
+            }else{
+                cout << "Falta el simbolo :, omitimos linea" << endl;
+                break;
+            }
+        }else{
+            string coman = minusculas(tipoP.at(0));
+            string datoComan = tipoP.at(2);
+            if (coman == "-path")
+            {
+                BorrarDisco(datoComan);
+            }
+            
+        }
+    }
+    
 }
 
 //-- FDISK --
@@ -259,6 +310,7 @@ void mandaraComando(string comando, vector<string> datos){
     }else if (comando == "rmdisk")
     {
         cout << "nos vamos a rmdisk" << endl;
+        RMDISK(datos);
 
     }else if (comando == "fdisk")
     {
