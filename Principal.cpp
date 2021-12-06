@@ -219,7 +219,22 @@ void MKDISK(vector<string> datos){
 
             }else if (coman == "-fit")
             {
-                Discvar.fit = datoComan;
+                string tipFit = minusculas(datoComan);
+                if (tipFit == "wf")
+                {
+                    Discvar.fit = "WF";
+                }else if (tipFit == "ff")
+                {
+                    Discvar.fit = "WF";
+                }else if (tipFit == "bf")
+                {
+                    Discvar.fit = "BF";
+                }else{
+                    cout << "FIT Invalido" << endl;
+                    break;
+                }
+                
+                
                 cout << "fit: " << tipoP.at(2) << endl;
 
             }else if (coman == "-unit")
@@ -234,9 +249,8 @@ void MKDISK(vector<string> datos){
                     Discvar.unit = 'm';
 
                 }else{
-                    cout<< "error" << endl;
+                    cout<< "error de parametro" << endl;
                 }
-                
                 
                 cout << "unit: " << tipoP.at(2) << endl;
 
@@ -269,7 +283,6 @@ void RMDISK(vector<string> datos){
     for (int i = 1; i < datos.size(); i++)
     {
         vector<string> tipoP;
-        cout << datos[i] << endl;
         tipoP = splitParam(datos.at(i));
         if (tipoP.at(0) == "SIN SIMBOLO" || tipoP.at(0) == "SIN PUNTOS")
         {
@@ -297,6 +310,115 @@ void RMDISK(vector<string> datos){
 //-- FDISK --
 void FDISK(vector<string> datos){
     cout << "estamos en fdisk" << endl;
+
+    for (int i = 1; i < datos.size(); i++)
+    {
+        vector<string> tipoP;
+        tipoP = splitParam(datos.at(i));
+        if (tipoP.at(0) == "SIN SIMBOLO" || tipoP.at(0) == "SIN PUNTOS")
+        {
+            if (tipoP.at(0) == "SIN SIMBOLO")
+            {
+                cout << "Falta el simbolo ~, omitimos linea" << endl;
+                break;
+            }else{
+                cout << "Falta el simbolo :, omitimos linea" << endl;
+                break;
+            }
+        }else{
+            string coman = minusculas(tipoP.at(0));
+            string datoComan = tipoP.at(2);
+            if (coman == "-path")
+            {
+                continue;
+            }else if (coman == "-size")
+            {
+                if (stoi(datoComan) >= 0)
+                {
+                    continue;
+                }else{
+                    cout << "Tamaño invalido" << endl;
+                    break;
+                }
+
+            }else if (coman == "-unit")
+            {   
+                if (datoComan == "B")
+                {
+                    //size
+                    continue;
+                }else if (datoComan == "K")
+                {
+                    //1024 * size
+                    continue;
+                }else if (datoComan == "M")
+                {
+                    //1024 * 1024 * size
+                    continue;
+                }else{
+                    cout << "parametro invalido" << endl;
+                    break;
+                }
+                
+            }else if (coman == "-type")
+            {
+                if (datoComan == "P")
+                {
+                    continue;
+                }else if (datoComan == "E")
+                {
+                    continue;
+                }else if (datoComan == "L")
+                {
+                    continue;
+                }else{
+                    cout << "parametro invalido" << endl;
+                    break;
+                }
+            }else if (coman == "-fit")
+            {
+                string tipFit = minusculas(datoComan);
+                if (tipFit == "wf")
+                {
+                    //Discvar.fit = "WF";
+                }else if (tipFit == "ff")
+                {
+                    //Discvar.fit = "WF";
+                }else if (tipFit == "bf")
+                {
+                    //Discvar.fit = "BF";
+                }else{
+                    cout << "FIT Invalido" << endl;
+                    break;
+                }
+
+            }else if (coman == "-delete")
+            {
+                datoComan = minusculas(datoComan);
+                if (datoComan == "fast")
+                {
+                    continue;
+                }else if (datoComan == "full")
+                {
+                    continue;
+                }else{
+                    cout << "parametro invalido" << endl;
+                    break;
+                }
+                
+            }else if (coman == "-name")
+            {
+                continue;
+            }else if (coman == "-add")
+            {
+                continue;
+            }else{
+                cout << "comando invalido en el FDisk" << endl;
+            }
+        }
+    }
+    cout << "Salimos del Fdisk" << endl;
+    
 }
 
 
