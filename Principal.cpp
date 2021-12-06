@@ -15,7 +15,13 @@
 #include <algorithm>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <filesystem>
 using namespace std;
+
+// --  GLOBALES--
+//TODO: agregar el resto de comandos
+vector<string> TodosComandos = {"mkdisk", "rmdisk", "fdisk", "exec"};
+
 
 //-- ESTRUCTURAS
 //-- PARTITION --
@@ -178,6 +184,7 @@ vector<string> splitParam(string linea){
     
 }
 
+//-- Borrar disco (RMdisk) --
 int BorrarDisco(string path){
     if(remove(path.c_str()) != 0 )
     {
@@ -257,15 +264,13 @@ void MKDISK(vector<string> datos){
             }else if (coman == "-path")
             {
                 Discvar.path = datoComan;
-
-                /*if (mkdir(datoComan.c_str(), S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) == 0)
-                {
-                    cout << "creada correctamente" << endl;
-                }else{
-                    cout << "no se creo" << endl;
-                }*/
                 
                 //TODO: hacer la pinche ruta
+                string ruta = "/home/caca";
+                if (mkdir("/lala", 0777) == -1)cerr << "Error :  " << strerror(errno) << endl;
+                else cout << "Directory created";
+                
+
                 cout << "path: " << tipoP.at(2) << endl;
             }else{
                 cout << "comando Invalido" << endl;
@@ -383,7 +388,7 @@ void FDISK(vector<string> datos){
                     //Discvar.fit = "WF";
                 }else if (tipFit == "ff")
                 {
-                    //Discvar.fit = "WF";
+                    //Discvar.fit = "FF";
                 }else if (tipFit == "bf")
                 {
                     //Discvar.fit = "BF";
@@ -438,23 +443,91 @@ void mandaraComando(string comando, vector<string> datos){
     {
         cout << "nos vamos a fdisk" << endl;
 
+    }else if (comando == "exec")
+    {
+        cout << "nos vamos al exec" << endl;
+        //EXEC(datos);
+        cout << "estamos ene exec" << endl;
+
+        for (int i = 1; i < datos.size(); i++)
+        {
+            vector<string> tipoP;
+            tipoP = splitParam(datos.at(i));
+
+            if (tipoP.at(0) == "SIN SIMBOLO" || tipoP.at(0) == "SIN PUNTOS")
+            {
+                if (tipoP.at(0) == "SIN SIMBOLO")
+                {
+                    cout << "Falta el simbolo ~, omitimos linea" << endl;
+                    break;
+                }else{
+                    cout << "Falta el simbolo :, omitimos linea" << endl;
+                    break;
+                }
+            }else{
+                string coman = minusculas(tipoP[0]);
+                string datoComan = tipoP[2];
+
+                if(coman == "-path"){
+
+                    if (datoComan.substr(datoComan.find_last_of(".")+1) == "sh")
+                    {
+                        ifstream archivo(datoComan.c_str());
+                        string linea;
+
+
+                        while (getline(archivo, linea))
+                        {
+                            if (linea.empty())
+                            {
+                                continue;
+                            }else{
+                                vector<string> var;
+                                var = split(linea);
+
+                                cout << ")"<< linea << endl;
+                                cout << var[0] << endl;
+
+                                vector<string> comandosE{};
+
+                                cout << "la espliteada de exec: " << var[0] << endl;
+                                string comando = minusculas(var[0]);
+
+                                if (existeEnVector(TodosComandos, comando) )
+                                {
+                                    mandaraComando(comando, var);
+
+                                }else if (comando == "exit")
+                                {
+                                    exit(0);
+                                }else{
+                                    cout << "No existe el comando: " << comando << endl;
+                                }
+                            }
+                        }
+                    }else{
+                        cout << "Extension invalida del archivo" << endl;
+                        break;
+                    }
+
+                }else{
+                    cout << "Comando invalido del EXEC" << endl;
+                    break;
+                }
+            }
+        }
     }
 }
 
-
-
 int main(){
-
-    //TODO: agregar el resto de comandos
-    vector<string> TodosComandos = {"mkdisk", "rmdisk", "fdisk"};
 
     while (true)
     {
-        cout <<  "ruta a pedir: " << ends;
+        cout <<  "comando a pedir: " << ends;
         string ruta;
         getline(cin, ruta);
 
-        cout << "la ruta es: " << ruta << endl;
+        cout << "el comando es: " << ruta << endl;
 
         vector<string> var;
         var = split(ruta);
