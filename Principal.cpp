@@ -266,12 +266,23 @@ void MKDISK(vector<string> datos){
             {
                 Discvar.path = path + datoComan;
                 
-                //TODO: hacer la pinche ruta
-                //TODO: usar system para tratar de crear esas rutas, espero si funcione
-                system("ls");
-                string ruta = path + "/caca";
-                cout << Discvar.path << "esta es la ruta" << endl;
-                if (mkdir(ruta.c_str(), 0777) == -1)cerr << "Error :  " << strerror(errno) << endl;
+                //encontramos el tamaño del nombre del disco con todo y extension
+                int pivote;
+                int contador = 0;
+                for (int i = 0; i < datoComan.length(); i++)
+                {
+                    if ((datoComan[((datoComan.length()-1) - i)]) == '/')
+                    {
+                        pivote = contador;
+                        break;
+                    }
+                    contador ++;
+                }
+                int empieza = Discvar.path.length() - pivote - 1;
+                //aca recortamos la ruta para que nos cree esas carpetas
+                string cortada = Discvar.path.substr(0, empieza);
+
+                if (mkdir(cortada.c_str(), 0777) == -1)cerr << "Error :  " << strerror(errno) << endl;
                 else cout << "Directory created"<<endl; 
                 
 
@@ -305,7 +316,7 @@ void RMDISK(vector<string> datos){
             }
         }else{
             string coman = minusculas(tipoP.at(0));
-            string datoComan = tipoP.at(2);
+            string datoComan = path + tipoP.at(2);
             if (coman == "-path")
             {
                 BorrarDisco(datoComan);
