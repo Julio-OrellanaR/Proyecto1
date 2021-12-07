@@ -47,6 +47,7 @@ struct MBR
 };
 
 //-- DISCO --
+string path="/home/julio-or";
 struct DISCO
 {   
     int size;
@@ -263,12 +264,15 @@ void MKDISK(vector<string> datos){
 
             }else if (coman == "-path")
             {
-                Discvar.path = datoComan;
+                Discvar.path = path + datoComan;
                 
                 //TODO: hacer la pinche ruta
-                string ruta = "/home/caca";
-                if (mkdir("/lala", 0777) == -1)cerr << "Error :  " << strerror(errno) << endl;
-                else cout << "Directory created";
+                //TODO: usar system para tratar de crear esas rutas, espero si funcione
+                system("ls");
+                string ruta = path + "/caca";
+                cout << Discvar.path << "esta es la ruta" << endl;
+                if (mkdir(ruta.c_str(), 0777) == -1)cerr << "Error :  " << strerror(errno) << endl;
+                else cout << "Directory created"<<endl; 
                 
 
                 cout << "path: " << tipoP.at(2) << endl;
@@ -484,9 +488,6 @@ void mandaraComando(string comando, vector<string> datos){
                             }else{
                                 vector<string> var;
                                 var = split(linea);
-
-                                cout << ")"<< linea << endl;
-                                cout << var[0] << endl;
 
                                 vector<string> comandosE{};
 
