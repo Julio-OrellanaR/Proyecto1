@@ -450,7 +450,6 @@ void mandaraComando(string comando, vector<string> datos){
     }else if (comando == "exec")
     {
         cout << "nos vamos al exec" << endl;
-        //EXEC(datos);
         cout << "estamos ene exec" << endl;
 
         for (int i = 1; i < datos.size(); i++)
@@ -483,6 +482,9 @@ void mandaraComando(string comando, vector<string> datos){
                         while (getline(archivo, linea))
                         {
                             if (linea.empty())
+                            {
+                                continue;
+                            }else if(linea.at(0) == '#')
                             {
                                 continue;
                             }else{
