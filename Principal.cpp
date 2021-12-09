@@ -22,6 +22,7 @@ using namespace std;
 //TODO: agregar el resto de comandos
 vector<string> TodosComandos = {"mkdisk", "rmdisk", "fdisk", "exec", "pause"};
 void CreatePartitionPimari(int, char, string, char, string, string);
+void CreatePartitionExtend();
 bool existePARTITION(string, string);
 
 
@@ -380,6 +381,10 @@ void CreatePartitionPimari(int size, char unit, string pathPart, string fit, str
     }
 }
 
+void CreatePartitionExtend(){
+    cout << "extendida" << endl;
+}
+
 // -- EXISTENCIA de PARTICION --
 bool existePARTITION(string ruta, string name){
     int extendida = -1;
@@ -652,7 +657,7 @@ void FDISK(vector<string> datos){
     string fit = "";
     int size_part = 0;
     char unit = 'B';
-    char type = 0;
+    char typeFd = 0;
     string name = "";
 
 
@@ -709,13 +714,13 @@ void FDISK(vector<string> datos){
             {
                 if (datoComan == "P")
                 {
-                    type = 'P';
+                    typeFd = 'P';
                 }else if (datoComan == "E")
                 {
-                    type = 'E';
+                    typeFd = 'E';
                 }else if (datoComan == "L")
                 {
-                    type = 'L';
+                    typeFd = 'L';
                 }else{
                     cout << "parametro invalido" << endl;
                     break;
@@ -762,7 +767,21 @@ void FDISK(vector<string> datos){
             }
         }
     }
-    CreatePartitionPimari(size_part, unit, rutaTotal, fit, name);
+    if (typeFd == 'P')
+    {
+        CreatePartitionPimari(size_part, unit, rutaTotal, fit, name);
+    }else if (typeFd == 'E')
+    {
+        CreatePartitionExtend();
+    }else
+    {
+        //particion logica
+        cout << "Logica, no funka xd" << endl;
+    }
+    
+    
+    
+    
     
     cout << "Salimos del Fdisk" << endl;
     
