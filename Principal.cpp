@@ -128,7 +128,7 @@ void crearDisco(DISCO dc){
     fclose(file);
 }
 
-void CreatePartitionPimari(int size, char unit, string pathPart, string archivo,string fit, string name){
+void CreatePartitionPimari(int size, char unit, string pathPart, string fit, string name){
     char auxUnit = 0;
     char auxFit = 0;
     string auxPath = pathPart;
@@ -213,16 +213,12 @@ void CreatePartitionPimari(int size, char unit, string pathPart, string archivo,
                 }
             }
             
-            if (archivo == "principal")
-            {
-                cout << "Espacio disponible: " << (mbr.MBR_tamanio - espaciousado) << " Bytes" << endl;
-                cout << "Espacio necesario:  " << size_bytes << " Bytes" << endl;
-            }
+            cout << "Espacio disponible: " << (mbr.MBR_tamanio - espaciousado) << " Bytes" << endl;
+            cout << "Espacio necesario:  " << size_bytes << " Bytes" << endl;
 
             //verificar espacios
             if ((mbr.MBR_tamanio - espaciousado) >= size_bytes)
             {
-                cout <<  "entre 1" << endl;
                 if (!existePARTITION(pathPart, name))
                 {
                     mbr.disk_fit = auxFit;
@@ -267,7 +263,7 @@ void CreatePartitionPimari(int size, char unit, string pathPart, string archivo,
                             fwrite(&buff, 1, 1, fp);
                         }
 
-                        if (archivo == "principal") cout << "...\n" << "Particion extendida creada con exito" << endl;
+                        cout << "...\n" << "Particion extendida creada con exito" << endl;
  
                     }else if (mbr.disk_fit  == 'B')
                     {
@@ -313,7 +309,7 @@ void CreatePartitionPimari(int size, char unit, string pathPart, string archivo,
                         {
                             fwrite(&buff, 1, 1, fp);
                         }
-                        if (archivo == "principal") cout << "...\n" << "Particion primaria creada con exito" <<  endl;
+                        cout << "...\n" << "Particion primaria creada con exito" <<  endl;
                     
                     }else if (mbr.disk_fit  == 'W')
                     {
@@ -363,7 +359,7 @@ void CreatePartitionPimari(int size, char unit, string pathPart, string archivo,
                             fwrite(&buff, 1, 1, fp);
                         }
 
-                        if(archivo == "principal") cout << "...\n" << "Particion primaria creada con exito" <<  endl;
+                        cout << "...\n" << "Particion primaria creada con exito" <<  endl;
                         
                     }
                 }else
@@ -387,7 +383,6 @@ void CreatePartitionPimari(int size, char unit, string pathPart, string archivo,
 // -- EXISTENCIA de PARTICION --
 bool existePARTITION(string ruta, string name){
     int extendida = -1;
-    cout << "Entre al if de existe" << endl;
     FILE *fp;
 
     if ((fp = fopen(ruta.c_str(), "rb+")))
@@ -767,7 +762,7 @@ void FDISK(vector<string> datos){
             }
         }
     }
-    CreatePartitionPimari(size_part, unit, rutaTotal, "principal", fit, name);
+    CreatePartitionPimari(size_part, unit, rutaTotal, fit, name);
     
     cout << "Salimos del Fdisk" << endl;
     
