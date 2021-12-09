@@ -20,7 +20,9 @@ using namespace std;
 
 // --  GLOBALES--
 //TODO: agregar el resto de comandos
-vector<string> TodosComandos = {"mkdisk", "rmdisk", "fdisk", "exec"};
+vector<string> TodosComandos = {"mkdisk", "rmdisk", "fdisk", "exec", "pause"};
+void CreatePartitionPimari(int, char, string, char, string, string);
+bool existePARTITION(string, string);
 
 
 //-- ESTRUCTURAS
@@ -28,8 +30,8 @@ vector<string> TodosComandos = {"mkdisk", "rmdisk", "fdisk", "exec"};
 struct PARTITION
 {
     char part_status;
-    char part_type = 'P';
-    string part_fit = "FF";
+    char part_type;
+    char part_fit;
     int part_start;
     int part_size;
     char part_name[16];
@@ -42,9 +44,21 @@ struct MBR
     int MBR_tamanio;
     time_t MBR_fecha_creacion;
     int MBR_disk_signature;
-    string disk_fit="FF";
+    char disk_fit;
     PARTITION MBR_partition[4];
 };
+
+//-- EXTENDED BOOT RECORD -- EBR
+struct EBR
+{
+    char EBR_part_status;
+    string EBR_part_fit;
+    int EBR_part_start;
+    int EBR_part_size;
+    int EBR_part_next;
+    char EBR_part_name[16];
+};
+
 
 //-- DISCO --
 string path="/home/julio-or";
@@ -97,8 +111,8 @@ void crearDisco(DISCO dc){
     {
         mbr.MBR_partition[i].part_status = '0';
         mbr.MBR_partition[i].part_size = 0;
-        mbr.MBR_partition[i].part_fit = "FF";
-        mbr.MBR_partition[i].part_start = tamanio;
+        mbr.MBR_partition[i].part_fit = '0';
+        mbr.MBR_partition[i].part_start = -1;
         strcpy(mbr.MBR_partition[i].part_name, "");
     }
 
@@ -114,6 +128,315 @@ void crearDisco(DISCO dc){
     fclose(file);
 }
 
+void CreatePartitionPimari(int size, char unit, string pathPart, string archivo,string fit, string name){
+    char auxUnit = 0;
+    char auxFit = 0;
+    string auxPath = pathPart;
+    int size_bytes = 1024;
+    char buff = '1';
+
+    //definimos el fit que utilizara segun el parametro
+    if (fit != "")
+    {
+        if (fit == "WF")
+        {
+            auxFit = 'W';
+        }else if (fit == "FF")
+        {
+            auxFit = 'F';
+        }else if (fit == "BF")
+        {
+            auxFit = 'B';
+        }
+        
+    }else{
+        auxFit = 'W';
+
+    }
+
+    //definimos el unit
+    if (unit != 0)
+    {
+        auxUnit = unit;
+        if (auxUnit == 'B')
+        {   
+            size_bytes = size;
+        }else if (auxUnit = 'K')
+        {
+            size_bytes = size * 1024;
+        }else if (auxUnit == 'M')
+        {
+            size_bytes = size * 1024 * 1024;
+        }else{
+            cout << "ERROR" << endl;
+        }
+    }else{
+        size_bytes = size * 1024;
+    }
+
+    FILE *fp;
+    MBR mbr;
+    
+    if ((fp = fopen(auxPath.c_str(), "rb+")))
+    {
+        bool flagPartition = false;
+        int indicadorPartition = 0;
+        fseek(fp, 0, SEEK_SET);
+        fread(&mbr, sizeof(MBR), 1, fp);
+
+        //revisamos particiones
+        for (int i = 0; i < 4; i++)
+        {
+            if (mbr.MBR_partition[i].part_start == -1 )
+            {
+                flagPartition = true;
+                indicadorPartition = i;
+                break;
+            }
+            
+            if ((mbr.MBR_partition[i].part_status == '1') && (mbr.MBR_partition[i].part_size >= size_bytes))
+            {
+                flagPartition = true;
+                indicadorPartition = i;
+                break;
+            }
+        }
+
+        if (flagPartition)
+        {
+            int espaciousado = 0;
+            for (int i = 0; i < 4; i++)
+            {
+                if (mbr.MBR_partition[i].part_status != '1')
+                {
+                    espaciousado += mbr.MBR_partition[i].part_size;
+                }
+            }
+            
+            if (archivo == "principal")
+            {
+                cout << "Espacio disponible: " << (mbr.MBR_tamanio - espaciousado) << " Bytes" << endl;
+                cout << "Espacio necesario:  " << size_bytes << " Bytes" << endl;
+            }
+
+            //verificar espacios
+            if ((mbr.MBR_tamanio - espaciousado) >= size_bytes)
+            {
+                cout <<  "entre 1" << endl;
+                if (!existePARTITION(pathPart, name))
+                {
+                    mbr.disk_fit = auxFit;
+
+
+                    if (mbr.disk_fit  == 'F')
+                    {
+                        mbr.MBR_partition[indicadorPartition].part_type = 'E';
+                        mbr.MBR_partition[indicadorPartition].part_fit = auxFit;
+
+                        if (indicadorPartition == 0)
+                        {
+                            mbr.MBR_partition[indicadorPartition].part_start = sizeof(mbr);
+                        }else{
+                            int resultado = mbr.MBR_partition[indicadorPartition - 1].part_start + mbr.MBR_partition[indicadorPartition - 1].part_size;
+                            mbr.MBR_partition[indicadorPartition].part_start = resultado;
+                        }
+
+                        mbr.MBR_partition[indicadorPartition].part_size = size_bytes;
+                        mbr.MBR_partition[indicadorPartition].part_status = '0';
+                        strcpy(mbr.MBR_partition[indicadorPartition].part_name, name.c_str());
+
+                        //guarda el nuevo mbr
+                        //apuntamos al inicio
+                        fseek(fp, 0, SEEK_SET);
+                        fwrite(&mbr, sizeof(MBR), 1, fp);
+                        //se escribe la particion extendida
+                        fseek(fp, mbr.MBR_partition[indicadorPartition].part_start, SEEK_SET);
+
+                        EBR ebr;
+                        ebr.EBR_part_fit = auxFit;
+                        ebr.EBR_part_status = '0';
+                        ebr.EBR_part_size = 0;
+                        ebr.EBR_part_next = -1;
+                        ebr.EBR_part_start = mbr.MBR_partition[indicadorPartition].part_start;
+                        strcpy(ebr.EBR_part_name, "");
+                        //escribimos archivo
+                        fwrite(&ebr, sizeof(EBR), 1, fp);
+
+                        for (int i = 0; i < (size_bytes - (int)sizeof(EBR)); i++)
+                        {
+                            fwrite(&buff, 1, 1, fp);
+                        }
+
+                        if (archivo == "principal") cout << "...\n" << "Particion extendida creada con exito" << endl;
+ 
+                    }else if (mbr.disk_fit  == 'B')
+                    {
+                        int BestIndex = indicadorPartition;
+                        for (int i = 0; i < 4; i++)
+                        {
+                            if (mbr.MBR_partition[i].part_start == -1 || (mbr.MBR_partition[i].part_status == '1' && mbr.MBR_partition[i].part_size >= size_bytes))
+                            {
+                                if (i != indicadorPartition)
+                                {
+                                    if (mbr.MBR_partition[BestIndex].part_size > mbr.MBR_partition[i].part_size)
+                                    {
+                                        BestIndex = i;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        mbr.MBR_partition[BestIndex].part_type = 'P';
+                        mbr.MBR_partition[BestIndex].part_fit = auxFit;
+
+
+                        //start
+                        if (BestIndex == 0)
+                        {
+                            mbr.MBR_partition[BestIndex].part_start = size_bytes;
+                        }else{
+                            int resultado = mbr.MBR_partition[BestIndex - 1].part_start + mbr.MBR_partition[BestIndex - 1].part_size;
+                            mbr.MBR_partition[BestIndex].part_start = resultado;
+                        }
+                        
+                        mbr.MBR_partition[BestIndex].part_size = size_bytes;
+                        mbr.MBR_partition[BestIndex].part_status = '0';
+                        strcpy(mbr.MBR_partition[BestIndex].part_name, name.c_str());
+                        //colocamos el aputnador 
+                        fseek(fp, 0, SEEK_SET);
+                        fwrite(&mbr, sizeof(MBR), 1, fp);
+                        //Guardamos nuevo apuntador de la nueva particion
+                        fseek(fp, mbr.MBR_partition[BestIndex].part_start, SEEK_SET);
+                        //escribimos en la nueva particion
+                        for (int i = 0; i < size_bytes; i++)
+                        {
+                            fwrite(&buff, 1, 1, fp);
+                        }
+                        if (archivo == "principal") cout << "...\n" << "Particion primaria creada con exito" <<  endl;
+                    
+                    }else if (mbr.disk_fit  == 'W')
+                    {
+                        int worstIndex = indicadorPartition;
+
+                        for (int i = 0; i < 4; i++)
+                        {
+                            if (mbr.MBR_partition[i].part_start == -1 || (mbr.MBR_partition[i].part_status == '1' && mbr.MBR_partition[i].part_size >= size_bytes))
+                            {
+                                if (i != indicadorPartition)
+                                {
+                                    if (mbr.MBR_partition[worstIndex].part_size < mbr.MBR_partition[i].part_size)
+                                    {
+                                        worstIndex = i;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        mbr.MBR_partition[worstIndex].part_type = 'P';
+                        mbr.MBR_partition[worstIndex].part_fit = auxFit;
+
+                        //start
+                        if (worstIndex == 0)
+                        {
+                            mbr.MBR_partition[worstIndex].part_start = sizeof(mbr);
+                        }else{
+                            int resultado = mbr.MBR_partition[worstIndex - 1].part_start + mbr.MBR_partition[worstIndex - 1].part_size;
+                            mbr.MBR_partition[worstIndex].part_size = resultado;
+                        }
+
+                        mbr.MBR_partition[worstIndex].part_size = size_bytes;
+                        mbr.MBR_partition[worstIndex].part_status = '0';
+                        strcpy(mbr.MBR_partition[worstIndex].part_name, name.c_str());
+
+                        //guardamos 
+                        fseek(fp, 0, SEEK_SET);
+                        fwrite(&mbr, sizeof(MBR), 1, fp);
+
+                        //mandamos el nuevo aputnador para guardar
+                        fseek(fp, mbr.MBR_partition[worstIndex].part_start, SEEK_SET);
+
+                        //escribimos en el MBR
+                        for (int i = 0; i < size_bytes; i++)
+                        {
+                            fwrite(&buff, 1, 1, fp);
+                        }
+
+                        if(archivo == "principal") cout << "...\n" << "Particion primaria creada con exito" <<  endl;
+                        
+                    }
+                }else
+                {
+                    cout << "ERROR ya existe una particion con ese nombre" << endl;
+                }
+            }else
+            {
+                cout << "ERROR la particion a crear excede el espacio libre" << endl;
+            }
+        }else{
+            cout << "ERROR: Ya existen 4 particiones, no se puede crear otra" << endl;
+            cout << "Elimine alguna para poder crear una" << endl;
+        }
+        fclose(fp);
+    }else{
+        cout << "ERROR no existe el disco" << endl;
+    }
+}
+
+// -- EXISTENCIA de PARTICION --
+bool existePARTITION(string ruta, string name){
+    int extendida = -1;
+    cout << "Entre al if de existe" << endl;
+    FILE *fp;
+
+    if ((fp = fopen(ruta.c_str(), "rb+")))
+    {
+        MBR mbr;
+        fseek(fp, 0, SEEK_SET);
+        fread(&mbr, sizeof(MBR), 1, fp);
+
+        for (int i = 0; i < 4; i++)
+        {
+            if (strcmp(mbr.MBR_partition[i].part_name, name.c_str()) == 0)
+            {
+                fclose(fp);
+                return true;
+
+            }else if (mbr.MBR_partition[i].part_type == 'E')
+            {
+                extendida = i;
+            }
+        }
+
+        cout << extendida << endl;
+
+        if (extendida != -1)
+        {
+            fseek(fp, mbr.MBR_partition[extendida].part_start, SEEK_SET);
+            EBR ebr;
+
+            while (((fread(&ebr, sizeof(EBR), 1, fp)) != 0) && (ftell(fp) < (mbr.MBR_partition[extendida].part_size + mbr.MBR_partition[extendida].part_start)))
+            {
+                cout << "estoy recorriendo " << endl;
+                if (strcmp(ebr.EBR_part_name, name.c_str()) == 0)
+                {
+                    cout << "primera opcion" << endl;
+                    fclose(fp);
+                    return true;
+                }
+                if (ebr.EBR_part_next == -1)
+                {
+                    cout << "segunda opcion"<< ebr.EBR_part_next << endl;
+                    fclose(fp);
+                    return false;
+                }
+            }
+        }
+    }
+    fclose(fp);
+    return false;
+}
 
 
 //--Existencia vector--
@@ -330,6 +653,13 @@ void RMDISK(vector<string> datos){
 //-- FDISK --
 void FDISK(vector<string> datos){
     cout << "estamos en fdisk" << endl;
+    string rutaTotal = "";
+    string fit = "";
+    int size_part = 0;
+    char unit = 'B';
+    char type = 0;
+    string name = "";
+
 
     for (int i = 1; i < datos.size(); i++)
     {
@@ -350,12 +680,12 @@ void FDISK(vector<string> datos){
             string datoComan = tipoP.at(2);
             if (coman == "-path")
             {
-                continue;
+                rutaTotal = path + datoComan;
             }else if (coman == "-size")
             {
                 if (stoi(datoComan) >= 0)
                 {
-                    continue;
+                    size_part = stoi(datoComan);
                 }else{
                     cout << "Tamaño invalido" << endl;
                     break;
@@ -366,15 +696,15 @@ void FDISK(vector<string> datos){
                 if (datoComan == "B")
                 {
                     //size
-                    continue;
+                    unit = 'B';
                 }else if (datoComan == "K")
                 {
                     //1024 * size
-                    continue;
+                    unit = 'K';
                 }else if (datoComan == "M")
                 {
                     //1024 * 1024 * size
-                    continue;
+                    unit = 'M';
                 }else{
                     cout << "parametro invalido" << endl;
                     break;
@@ -384,13 +714,13 @@ void FDISK(vector<string> datos){
             {
                 if (datoComan == "P")
                 {
-                    continue;
+                    type = 'P';
                 }else if (datoComan == "E")
                 {
-                    continue;
+                    type = 'E';
                 }else if (datoComan == "L")
                 {
-                    continue;
+                    type = 'L';
                 }else{
                     cout << "parametro invalido" << endl;
                     break;
@@ -400,13 +730,13 @@ void FDISK(vector<string> datos){
                 string tipFit = minusculas(datoComan);
                 if (tipFit == "wf")
                 {
-                    //Discvar.fit = "WF";
+                    fit = "WF";
                 }else if (tipFit == "ff")
                 {
-                    //Discvar.fit = "FF";
+                    fit = "FF";
                 }else if (tipFit == "bf")
                 {
-                    //Discvar.fit = "BF";
+                    fit = "BF";
                 }else{
                     cout << "FIT Invalido" << endl;
                     break;
@@ -428,16 +758,25 @@ void FDISK(vector<string> datos){
                 
             }else if (coman == "-name")
             {
-                continue;
+                name = datoComan;
             }else if (coman == "-add")
             {
-                continue;
+                name = datoComan;
             }else{
                 cout << "comando invalido en el FDisk" << endl;
             }
         }
     }
+    CreatePartitionPimari(size_part, unit, rutaTotal, "principal", fit, name);
+    
     cout << "Salimos del Fdisk" << endl;
+    
+}
+
+// -- PAUSE --
+void PAUSE(vector<string> datos){
+    cout << "estamos en pause" << endl;
+    
     
 }
 
@@ -457,6 +796,7 @@ void mandaraComando(string comando, vector<string> datos){
     }else if (comando == "fdisk")
     {
         cout << "nos vamos a fdisk" << endl;
+        FDISK(datos);
 
     }else if (comando == "exec")
     {
@@ -530,7 +870,11 @@ void mandaraComando(string comando, vector<string> datos){
                 }
             }
         }
+    }else if (comando == "pause")
+    {
+        PAUSE(datos);
     }
+    
 }
 
 int main(){
