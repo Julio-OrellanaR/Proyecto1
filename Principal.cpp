@@ -23,6 +23,7 @@ using namespace std;
 vector<string> TodosComandos = {"mkdisk", "rmdisk", "fdisk", "exec", "pause"};
 void CreatePartitionPimari(int, char, string, char, string);
 void CreatePartitionExtend(int, char, string, char, string);
+void createPartitionLogica(int, char, string, char, string);
 bool existePARTITION(string, string);
 
 
@@ -53,7 +54,7 @@ struct MBR
 struct EBR
 {
     char EBR_part_status;
-    string EBR_part_fit;
+    char EBR_part_fit;
     int EBR_part_start;
     int EBR_part_size;
     int EBR_part_next;
@@ -622,6 +623,141 @@ void CreatePartitionExtend(int size, char unit, string pathPart, char fit, strin
     }
 }
 
+void createPartitionLogica(int size, char unit, string pathPart, char fit, string name){
+    char auxUnit = 0;
+    char auxFit = 0;
+    string auxPath = pathPart;
+    int size_bytes = 1024;
+    char buff = '1';
+
+    //definimos el fit que utilizara segun el parametro
+    if (fit != 0)
+    {
+        auxFit = fit;
+    }else{
+        auxFit = 'W';
+    }
+    
+    //definimos el unit
+    if (unit != 0)
+    {
+        auxUnit = unit;
+        if (auxUnit == 'B')
+        {   
+            size_bytes = size;
+        }else if (auxUnit = 'K')
+        {
+            size_bytes = size * 1024;
+        }else if (auxUnit == 'M')
+        {
+            size_bytes = size * 1024 * 1024;
+        }else{
+            cout << "ERROR" << endl;
+        }
+    }else{
+        size_bytes = size * 1024;
+    }
+
+    
+    FILE *fp;
+    MBR mbr;
+
+    if ((fp = fopen(auxPath.c_str(), "rb+")))
+    {
+        int indicaExtendida = -1;
+        fseek(fp, 0, SEEK_SET);
+        fread(&mbr, sizeof(MBR), 1, fp);
+
+        for (int i = 0; i < 4; i++)
+        {
+            if (mbr.MBR_partition[i].part_type == 'E')
+            {
+                indicaExtendida = i;
+                break;
+            }
+        }
+
+        if(!existePARTITION(pathPart, name))
+        {
+            if (indicaExtendida != -1)
+            {
+                EBR ebr;
+                int contador = mbr.MBR_partition[indicaExtendida].part_start;
+                fseek(fp, contador, SEEK_SET);
+                fread(&ebr, sizeof(EBR), 1, fp);
+
+                //comprobamos si es la primera
+                if (ebr.EBR_part_size == 0)
+                {
+                    if (mbr.MBR_partition[indicaExtendida].part_size < size_bytes)
+                    {
+                        cout << "ERROR la logica supera el espacio disponible de la extendida" << endl;
+                    }else
+                    {
+                        cout << "entre al else para crear " << endl;
+                        ebr.EBR_part_status = '0';
+                        ebr.EBR_part_fit = auxFit;
+                        ebr.EBR_part_start = ftell(fp) - sizeof(EBR); //Para regresar al inicio de la extendida
+                        //ftell da el tamaño usado y el size of es de la esctrura creada
+                        ebr.EBR_part_size = size_bytes;
+                        ebr.EBR_part_next = -1;
+                        strcpy(ebr.EBR_part_name, name.c_str());
+                        fseek(fp, mbr.MBR_partition[indicaExtendida].part_start, SEEK_SET);
+                        fwrite(&ebr, sizeof(EBR), 1, fp);
+                        
+                        cout << "...\nParticion logica creada con exito "<< endl;
+                    }
+                }else{
+                    while((ebr.EBR_part_next != -1) && (ftell(fp) < (mbr.MBR_partition[indicaExtendida].part_size + mbr.MBR_partition[indicaExtendida].part_start))){
+                        fseek(fp, ebr.EBR_part_next, SEEK_SET);
+                        fread(&ebr, sizeof(EBR), 1, fp);
+                    }
+
+                    //byte en el que estoy mas el tamaño que necesito me da el tamaño que quiero par la nueva particion
+                    int tamanioNeed = ebr.EBR_part_start + ebr.EBR_part_size;
+
+                    //comprobamos si el tamaño necesario es menor de la particion que se creara
+                    if (tamanioNeed <= (mbr.MBR_partition[indicaExtendida].part_size + mbr.MBR_partition[indicaExtendida].part_start))
+                    {
+                        //le damos el byte al proximo ebr
+                        ebr.EBR_part_next = ebr.EBR_part_start + ebr.EBR_part_size;
+
+                        //Escribimos el next del proximo ebr
+                        fseek(fp, ftell(fp) - sizeof (EBR),SEEK_SET);
+                        fwrite(&ebr, sizeof(EBR),1 ,fp);
+                        //Escribimos el nuevo EBR
+                        //TODO: cambiar a ebr.part next para simplificar
+                        fseek(fp, ebr.EBR_part_start + ebr.EBR_part_size, SEEK_SET);
+
+                        ebr.EBR_part_status = 0;
+                        ebr.EBR_part_fit = auxFit;
+                        ebr.EBR_part_start = ftell(fp);
+                        ebr.EBR_part_size = size_bytes;
+                        ebr.EBR_part_next = -1;
+                        strcpy(ebr.EBR_part_name, name.c_str());
+                        fwrite(&ebr,sizeof(EBR),1,fp);
+                        //tenemos guardada la nueva particion logica
+                        cout << "Particion logica creada con exito "<< endl;
+                    }else{
+                        cout << "ERROR la particion logica a crear excede el espacio disponible de la particion extendida" << endl;
+                    } 
+                }
+            }else
+            {
+                cout << "ERROR Primero tenemos que crear una particion Extendida " << endl;
+            }
+        }else
+        {
+            cout << "ERROR ya existe una particion con ese nombre" << endl;
+        }
+    fclose(fp);
+    }else
+    {
+        cout << "ERROR no existe el disco" << endl;
+    }
+}
+
+
 // -- EXISTENCIA de PARTICION --
 bool existePARTITION(string ruta, string name){
     int extendida = -1;
@@ -655,16 +791,13 @@ bool existePARTITION(string ruta, string name){
 
             while (((fread(&ebr, sizeof(EBR), 1, fp)) != 0) && (ftell(fp) < (mbr.MBR_partition[extendida].part_size + mbr.MBR_partition[extendida].part_start)))
             {
-                cout << "estoy recorriendo " << endl;
                 if (strcmp(ebr.EBR_part_name, name.c_str()) == 0)
                 {
-                    cout << "primera opcion" << endl;
                     fclose(fp);
                     return true;
                 }
                 if (ebr.EBR_part_next == -1)
                 {
-                    cout << "segunda opcion"<< ebr.EBR_part_next << endl;
                     fclose(fp);
                     return false;
                 }
@@ -761,7 +894,6 @@ int BorrarDisco(string path){
 
 //-- MKDISK --
 void MKDISK(vector<string> datos){
-    cout << "estamos en mkdisk" << endl;
 
     for (int i = 1; i < datos.size(); i++)
     {   
@@ -889,7 +1021,7 @@ void RMDISK(vector<string> datos){
 
 //-- FDISK --
 void FDISK(vector<string> datos){
-    cout << "estamos en fdisk" << endl;
+    
     string rutaTotal = "";
     char fit = 0;
     int size_part = 0;
@@ -1012,15 +1144,8 @@ void FDISK(vector<string> datos){
         CreatePartitionExtend(size_part, unit, rutaTotal, fit, name);
     }else
     {
-        //particion logica
-        cout << "Logica, no funka xd" << endl;
+        createPartitionLogica(size_part, unit, rutaTotal, fit, name);
     }
-    
-    
-    
-    
-    
-    cout << "Salimos del Fdisk" << endl;
     
 }
 
@@ -1036,23 +1161,18 @@ void PAUSE(vector<string> datos){
 void mandaraComando(string comando, vector<string> datos){
     if (comando == "mkdisk")
     {
-        cout << "nos vamos a mkdisk" << endl;
         MKDISK(datos);
                 
     }else if (comando == "rmdisk")
     {
-        cout << "nos vamos a rmdisk" << endl;
         RMDISK(datos);
 
     }else if (comando == "fdisk")
     {
-        cout << "nos vamos a fdisk" << endl;
         FDISK(datos);
 
     }else if (comando == "exec")
     {
-        cout << "nos vamos al exec" << endl;
-        cout << "estamos ene exec" << endl;
 
         for (int i = 1; i < datos.size(); i++)
         {
@@ -1095,7 +1215,6 @@ void mandaraComando(string comando, vector<string> datos){
 
                                 vector<string> comandosE{};
 
-                                cout << "la espliteada de exec: " << var[0] << endl;
                                 string comando = minusculas(var[0]);
 
                                 if (existeEnVector(TodosComandos, comando) )
@@ -1132,17 +1251,14 @@ int main(){
 
     while (true)
     {
-        cout <<  "comando a pedir: " << ends;
+        cout <<  "Ingrese comando: " << ends;
         string ruta;
         getline(cin, ruta);
-
-        cout << "el comando es: " << ruta << endl;
 
         vector<string> var;
         var = split(ruta);
         vector<string> comandosE{};
 
-        cout << "la espliteada: " << var[0] << endl;
         string comando = minusculas(var[0]);
 
         if (existeEnVector(TodosComandos, comando) )
