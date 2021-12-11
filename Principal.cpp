@@ -20,11 +20,13 @@ using namespace std;
 
 // --  GLOBALES--
 //TODO: agregar el resto de comandos
-vector<string> TodosComandos = {"mkdisk", "rmdisk", "fdisk", "exec", "pause"};
+vector<string> TodosComandos = {"mkdisk", "rmdisk", "fdisk", "exec", "pause", "mount"};
 void CreatePartitionPimari(int, char, string, char, string);
 void CreatePartitionExtend(int, char, string, char, string);
 void createPartitionLogica(int, char, string, char, string);
 bool existePARTITION(string, string);
+int buscarLetra(string, string);
+int buscarNumero(string, string);
 
 
 //-- ESTRUCTURAS
@@ -61,6 +63,17 @@ struct EBR
     char EBR_part_name[16];
 };
 
+// -- MOUNT --
+struct NDMOUNT
+{
+    string direccion;
+    string nombre;
+    string id;
+    char letra;
+    int num;
+    int size = 0;
+};
+vector<NDMOUNT> Arreglomount;
 
 //-- DISCO --
 string path="/home/julio-or";
@@ -808,6 +821,191 @@ bool existePARTITION(string ruta, string name){
     return false;
 }
 
+int buscarParticion_P_E(string direccion, string nombre){
+    string auxPath = direccion;
+    string auxName = nombre;
+    FILE *fp;
+
+    if((fp = fopen(auxPath.c_str(), "rb+"))){
+
+        MBR mbr;
+        fseek(fp,0,SEEK_SET);
+        fread(&mbr,sizeof(MBR),1,fp);
+        for(int i = 0; i < 4; i++){
+            if(mbr.MBR_partition[i].part_status != '1'){
+                if(strcmp(mbr.MBR_partition[i].part_name,auxName.c_str()) == 0){
+                    return i;
+                }
+            }
+        }
+
+    }
+    return -1;
+}
+
+
+int buscarParticion_Logica(string direccion, string nombre){
+    string auxPath = direccion;
+    string auxName = nombre;
+    FILE *fp;
+    if((fp = fopen(auxPath.c_str(),"rb+"))){
+        int extendida = -1;
+        MBR mbr;
+        fseek(fp,0,SEEK_SET);
+        fread(&mbr,sizeof(MBR),1,fp);
+        for(int i = 0; i < 4; i++){
+            if(mbr.MBR_partition[i].part_type == 'E'){
+                extendida = i;
+                break;
+            }
+        }
+        if(extendida != -1){
+            EBR ebr;
+            fseek(fp, mbr.MBR_partition[extendida].part_start,SEEK_SET);
+            while(fread(&ebr,sizeof(EBR),1,fp)!=0 && (ftell(fp) < mbr.MBR_partition[extendida].part_start + mbr.MBR_partition[extendida].part_size)){
+                if(strcmp(ebr.EBR_part_name, auxName.c_str()) == 0){
+                    return (ftell(fp) - sizeof(EBR));
+                }
+            }
+        }
+        fclose(fp);
+    }
+    return -1;
+}
+
+void mostrarListaMount(){
+    for (int i = 0; i < Arreglomount.size(); i++)
+    {
+        cout << "" << Arreglomount[i].nombre << endl;
+        cout << "" << Arreglomount[i].letra << endl;
+        cout << "" << Arreglomount[i].num << endl;
+    }
+    
+}
+
+void ejecutar_mount(string name, string pathrut){
+
+    int indexP = buscarParticion_P_E(pathrut, name);
+    NDMOUNT varMOUNT;
+
+
+    if(indexP != -1){
+        FILE *fp;
+
+        if((fp = fopen(pathrut.c_str(),"rb+"))){
+
+            MBR mbr;
+            fseek(fp, 0, SEEK_SET);
+            fread(&mbr, sizeof(MBR),1,fp);
+            mbr.MBR_partition[indexP].part_status = '2';
+            fseek(fp,0,SEEK_SET);
+            fwrite(&mbr,sizeof(MBR),1,fp);
+            fclose(fp);
+            int letra = buscarLetra(pathrut,name);
+
+            if(letra == -1){
+                cout << "\033[31mERROR: la particion ya esta montada.\033[0m" << endl;
+            }else{
+                int num = buscarNumero(pathrut, name);
+                char auxLetra = static_cast<char>(letra);
+                string id = "vd";
+                id += auxLetra + to_string(num);
+
+                //llenamos el nodo
+                varMOUNT.direccion = pathrut;
+                varMOUNT.letra =  auxLetra;
+                varMOUNT.nombre = name;
+                varMOUNT.num = num;
+                varMOUNT.size = varMOUNT.size ++; 
+                Arreglomount.push_back(varMOUNT);
+
+                cout << "\033[94mParticion montada con exito.\033[0m" << endl;
+                mostrarListaMount();
+            }
+        }else{
+            cout << "\033[31mERROR: no se encuentra el disco.\033[0m" << endl;
+        }
+    }else{//Posiblemente logica
+        int indexP = buscarParticion_Logica(pathrut,name);
+
+        if(indexP != -1){
+
+            FILE *fp;
+
+            if((fp = fopen(pathrut.c_str(), "rb+"))){
+                EBR ebr;
+
+                fseek(fp, indexP, SEEK_SET);
+                fread(&ebr, sizeof(EBR),1,fp);
+                ebr.EBR_part_status = '2';
+
+                fseek(fp, indexP, SEEK_SET);
+                fwrite(&ebr, sizeof(EBR), 1, fp);
+                fclose(fp);
+
+                int letra = buscarLetra(pathrut,name);
+                if(letra == -1){
+                    cout << "\033[31mERROR: La particion ya esta montada.\033[0m" << endl;
+                }else{
+                    int num = buscarNumero(pathrut,name);
+                    char auxLetra = static_cast<char>(letra);
+                    string id = "vd";
+                    id += auxLetra + to_string(num);
+                    
+                    varMOUNT.direccion = pathrut;
+                    varMOUNT.letra = auxLetra;
+                    varMOUNT.nombre = name;
+                    varMOUNT.num = num;
+                    varMOUNT.size = varMOUNT.size ++;
+                    Arreglomount.push_back(varMOUNT);
+
+                    cout << "\033[94mParticion montada con exito.\033[0m" << endl;
+                    mostrarListaMount();
+                }
+            }else{
+                cout << "\033[31mERROR: no se encuentra el disco.\033[0m" << endl;
+            }
+        }else{
+            cout << "\033[31mERROR: no se encuentra la particion a montar.\033[0m" << endl;
+        }
+    }
+}
+
+
+int buscarLetra(string rupath, string nombre){
+    int retorno = 'a';
+
+    for (int i = 0; i < Arreglomount.size(); i++)
+    {
+        if((rupath == Arreglomount[i].direccion) && (nombre == Arreglomount[i].nombre)){
+            return -1;
+        }else{
+            if(rupath == Arreglomount[i].direccion){
+                return Arreglomount[i].letra;
+            }else if(retorno <= Arreglomount[i].letra){
+                retorno++;
+            }
+        }
+    }
+    
+    return retorno;
+}
+
+int buscarNumero(string ruthpath, string nombre){
+    int retorno = 1;
+
+    NDMOUNT mount;
+
+    for (int i = 0; i < Arreglomount.size(); i++)
+    {
+        if((ruthpath == Arreglomount[i].direccion) && (retorno == Arreglomount[i].num)){
+            retorno++;
+        }
+    }
+    
+    return retorno;
+}
+
 
 //--Existencia vector--
 bool existeEnVector(vector<string> v, string busqueda) {
@@ -1156,6 +1354,49 @@ void PAUSE(vector<string> datos){
     
 }
 
+void MOUNT(vector<string> datos){
+    string auxName = "";
+    string auxPath = "";
+
+    for (int i = 1; i < datos.size(); i++)
+    {
+        vector<string> tipoP;
+        tipoP = splitParam(datos.at(i));
+        if (tipoP.at(0) == "SIN SIMBOLO" || tipoP.at(0) == "SIN PUNTOS")
+        {
+            if (tipoP.at(0) == "SIN SIMBOLO")
+            {
+                cout << "Falta el simbolo ~, omitimos linea" << endl;
+                break;
+            }else{
+                cout << "Falta el simbolo :, omitimos linea" << endl;
+                break;
+            }
+        }else{
+            string coman = minusculas(tipoP.at(0));
+            string datoComan = tipoP.at(2);
+
+            if (coman == "-path")
+            {
+                auxPath = path + datoComan;
+            }else if (coman == "-name")
+            {
+                auxName = datoComan;
+            }else{
+                cout << "ERROR, no es comando valido" << endl;
+                break;
+            }
+        }
+    }
+
+    if (auxPath != "" && auxName != "")
+    {
+        ejecutar_mount(auxName, auxPath);
+    }else
+    {
+        cout << "ERROR, no se llenaron los datos" << endl;
+    }
+}
 
 //--comandos
 void mandaraComando(string comando, vector<string> datos){
@@ -1243,7 +1484,11 @@ void mandaraComando(string comando, vector<string> datos){
     }else if (comando == "pause")
     {
         PAUSE(datos);
+    }else if (comando == "mount")
+    {
+        MOUNT(datos);
     }
+    
     
 }
 
