@@ -22,7 +22,7 @@ using namespace std;
 // --  GLOBALES--
 //TODO: agregar el resto de comandos
 vector<string> TodosComandos = {"mkdisk", "rmdisk", "fdisk", "exec", "pause", "mount", "unmount", "mkfs",
-"login"};
+"login", "logout"};
 bool flag_login = false;
 void CreatePartitionPimari(int, char, string, char, string);
 void CreatePartitionExtend(int, char, string, char, string);
@@ -1731,6 +1731,22 @@ void comando_login(string usr, string password, string id){
     }
 }
 
+//-- ejecucion LOGOUT -- 
+void logOUT(){
+    //si esta en sesion activa
+    if(flag_login){
+
+        flag_login = false;
+
+        actualSesion.id_user = -1;
+        actualSesion.direccion = "";
+        actualSesion.inicioSuper = -1;
+
+        cout << "\033[94m\n--- Sesion finalizada ---.\033[0m" << endl;
+    }else
+        cout << "\033[31mERROR, no hay sesion acutalmente.\033[0m" << endl;
+}
+
 // -- Ejecucion comando MKFS --
 void comando_Mkfs(string id, string type, string fs){
     //Este comando trabaja con el mount
@@ -2330,6 +2346,10 @@ void LOGIN(vector<string> datos){
     }
 }
 
+void LOGOUT(vector<string> datos){
+    logOUT();
+}
+
 //--comandos
 void mandaraComando(string comando, vector<string> datos){
     if (comando == "mkdisk")
@@ -2428,6 +2448,9 @@ void mandaraComando(string comando, vector<string> datos){
     }else if (comando == "login")
     {
         LOGIN(datos);
+    }else if (comando == "logout")
+    {
+        LOGOUT(datos);
     }
     
     
