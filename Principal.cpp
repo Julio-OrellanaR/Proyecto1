@@ -1460,9 +1460,9 @@ bool buscar_IdMkfs(string id){
 char obtenerLogic(string direccion, string nombre){
     string auxPath = direccion;
     string auxName = nombre;
-    FILE *fp;
+    FILE * fp;
     
-    if((fp = fopen(auxPath.c_str(),"rb+"))){
+    if((fp = fopen(auxPath.c_str(), "rb+"))){
         int extendida = -1;
         MBR mbr;
 
@@ -1480,6 +1480,7 @@ char obtenerLogic(string direccion, string nombre){
 
             EBR ebr;
             fseek(fp, mbr.MBR_partition[extendida].part_start,SEEK_SET);
+            //retornamos el tipo de particion que se realizo  de la particion
             while(fread(&ebr,sizeof(EBR),1,fp)!=0 && (ftell(fp) < mbr.MBR_partition[extendida].part_start + mbr.MBR_partition[extendida].part_size)){
                 if(strcmp(ebr.EBR_part_name, auxName.c_str()) == 0){
                     return ebr.EBR_part_fit;
@@ -1550,28 +1551,35 @@ int verificarDatos_login(string user, string password, string direccion){
     SUPERBLOQUE super;
     INODOTABLA inodo;
 
-    fseek(fp, actualSesion.inicioSuper,SEEK_SET);
-    fread(&super,sizeof(SUPERBLOQUE),1,fp);
+    //nos ubicamos en la parte logeada
+    fseek(fp, actualSesion.inicioSuper, SEEK_SET);
+    fread(&super, sizeof(SUPERBLOQUE), 1, fp);
     //Leemos el inodo del archivo users.txt
-    fseek(fp,super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)),SEEK_SET);
-    fread(&inodo,sizeof(INODOTABLA),1,fp);
+
+    //apuntamos al inodo donde se creo
+    fseek(fp,super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)), SEEK_SET);
+    fread(&inodo, sizeof(INODOTABLA), 1, fp);
 
     for(int i = 0; i < 15; i++){
         if(inodo.i_block[i] != -1){
 
             BLOQUEARCHIVOS archivo;
-            fseek(fp,super.s_block_start,SEEK_SET);
+            //unicamos donde esatara el bipmat de bloques
+            fseek(fp, super.s_block_start, SEEK_SET);
 
+            //Leemos el bitmap
             for(int j = 0; j <= inodo.i_block[i]; j++){
-                fread(&archivo,sizeof(BLOQUEARCHIVOS),1,fp);
+                fread(&archivo, sizeof(BLOQUEARCHIVOS), 1, fp);
             }
-            strcat(cadena,archivo.b_content);
+            //copiamso el contenido en la cadena inicial
+            strcat(cadena, archivo.b_content);
         }
     }
 
     fclose(fp);
 
     char *end_str;
+    //generamos tokens
     char *token = strtok_r(cadena,"\n",&end_str);
 
     while(token != nullptr){
@@ -1630,46 +1638,55 @@ int log_entra(string direccion, string nombre, string user, string password){
 
         FILE *fp = fopen(direccion.c_str(),"rb+");
 
-        fread(&mbr,sizeof(MBR),1,fp);
-        fseek(fp,mbr.MBR_partition[index].part_start,SEEK_SET);
+        //leemos y apuntamos en la particion que xiste
+        fread(&mbr, sizeof(MBR), 1, fp);
+        fseek(fp, mbr.MBR_partition[index].part_start, SEEK_SET);
 
-        fread(&super,sizeof(SUPERBLOQUE),1,fp);
-        fseek(fp,super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)),SEEK_SET);
+        //leemos y apuntamos a la inicio de la tabla de nodos del superbloque
+        fread(&super, sizeof(SUPERBLOQUE), 1, fp);
+        fseek(fp, super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)), SEEK_SET);
 
-        fread(&inodo,sizeof(INODOTABLA),1,fp);
-        fseek(fp,super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)),SEEK_SET);
+        //leemos y apuntamos a la inicio de la tabla de inodos
+        fread(&inodo, sizeof(INODOTABLA), 1, fp);
+        fseek(fp, super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)), SEEK_SET);
 
         inodo.i_atime = time(nullptr);
 
+        //guardamos en la tabla INODOS
         fwrite(&inodo,sizeof(INODOTABLA),1,fp);
         fclose(fp);
 
+        //iniciamos sesion en la particion de index
         actualSesion.inicioSuper = mbr.MBR_partition[index].part_start;
+        //fit usada en la particion
         actualSesion.fit = mbr.MBR_partition[index].part_fit;
+        //JOURNAL en la session
         actualSesion.inicioJournal = mbr.MBR_partition[index].part_start + static_cast<int>(sizeof(SUPERBLOQUE));
+        //identificacion del numero utilizado
         actualSesion.tipo_sistema = super.s_filesystem_type;
-
+        //verificamos el login correcto
         return verificarDatos_login(user,password, direccion);
-    }else{
+    }else{//en logicas
         index = buscarParticion_Logica(direccion, nombre);
         if(index != -1){
 
             SUPERBLOQUE super;
             INODOTABLA inodo;
 
-            FILE *fp = fopen(direccion.c_str(),"rb+");
-            fseek(fp,index + static_cast<int>(sizeof(EBR)),SEEK_SET);
+            FILE * fp = fopen(direccion.c_str(),"rb+");
+            fseek(fp, index + static_cast<int>(sizeof(EBR)), SEEK_SET);
             fread(&super,sizeof(SUPERBLOQUE),1,fp);
-            fseek(fp,super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)),SEEK_SET);
+            fseek(fp, super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)), SEEK_SET);
 
-            fread(&inodo,sizeof(INODOTABLA),1,fp);
-            fseek(fp,super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)),SEEK_SET);
+            fread(&inodo, sizeof(INODOTABLA), 1, fp);
+            fseek(fp, super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)), SEEK_SET);
 
             inodo.i_atime = time(nullptr);
 
-            fwrite(&inodo,sizeof(INODOTABLA),1,fp);
+            fwrite(&inodo, sizeof(INODOTABLA), 1, fp);
             fclose(fp);
 
+            //ubicamos el super del login
             actualSesion.inicioSuper = index + static_cast<int>(sizeof(EBR));
             actualSesion.fit = obtenerLogic(direccion, nombre);
             return verificarDatos_login(user,password,direccion);
@@ -1682,32 +1699,30 @@ int log_entra(string direccion, string nombre, string user, string password){
 // -- Ejecucion del comando login
 void comando_login(string usr, string password, string id){
 
-    /*Banderas para verificar cuando venga un parametro y si se repite*/
-    bool flagUsr = false;
-    bool flagPass = false;
     bool flagId = false;
-    bool flag = false;
     bool flagMkfs = false;
-
-    /*Variables para obtener los valores de cada nodo*/
 
     flagMkfs = buscar_IdMkfs(id);
     flagId = busca_IDmount(id);
+
     if (flagMkfs)
     {
-        if(!flag_login){
-        if(flagId){
-            int indiceID = index_IDmount(id);
-            int res = log_entra(Arreglomount[indiceID].direccion, Arreglomount[indiceID].nombre, usr, password);
-            if(res == 1){
-                flag_login = true;
-                cout << "\033[94mSesion iniciada con exito rotundo \033[0m" << endl;
-            }else if(res == 2)
-                cout << "\033[31mERROR, contraseña incorrecta\033[0m" << endl;
-            else if(res == 0)
-                cout << "\033[usuario no econtrado\033[0m" << endl;
-        }else
-            cout << "\033[31mERROR, no se encuentra ninguna particion montada con ese id "<< id <<"\033[0m" << endl;
+        if(!flag_login)
+        {
+            if(flagId)
+            {
+                int indiceID = index_IDmount(id);
+                int res = log_entra(Arreglomount[indiceID].direccion, Arreglomount[indiceID].nombre, usr, password);
+                if(res == 1)
+                {
+                    flag_login = true;
+                    cout << "\033[94mSesion iniciada con exito rotundo \033[0m" << endl;
+                }else if(res == 2)
+                    cout << "\033[31mERROR, contraseña incorrecta\033[0m" << endl;
+                else if(res == 0)
+                    cout << "\033[usuario no econtrado\033[0m" << endl;
+            }else
+                cout << "\033[31mERROR, no se encuentra ninguna particion montada con ese id "<< id <<"\033[0m" << endl;
         }else{
             cout << "\033[31mERROR, sesion activa, cierre sesion para poder volver a iniciar sesion\033[0m" << endl;
         }
