@@ -1457,7 +1457,7 @@ bool buscar_IdMkfs(string id){
     return false;
 }
 
-char getLogicFit(string direccion, string nombre){
+char obtenerLogic(string direccion, string nombre){
     string auxPath = direccion;
     string auxName = nombre;
     FILE *fp;
@@ -1542,7 +1542,8 @@ int buscarGrupo(string name){
     return -1;
 }
 
-int verificarDatos(string user, string password, string direccion){
+// -- Verificaro los datos para login
+int verificarDatos_login(string user, string password, string direccion){
     FILE *fp = fopen(direccion.c_str(),"rb+");
 
     char cadena[400] = "\0";
@@ -1585,15 +1586,21 @@ int verificarDatos(string user, string password, string direccion){
         strcpy(id,token2);
 
         if(strcmp(id,"0") != 0){//Verificar que no sea un U/G eliminado
-            token2=strtok_r(nullptr,",",&end_token);
+            //analizamos la secuencia de tokens
+            token2 = strtok_r(nullptr,",",&end_token);
+
             strcpy(tipo,token2);
+
             if(strcmp(tipo,"U") == 0){
                 token2 = strtok_r(nullptr,",",&end_token);
                 group = token2;
+
                 token2 = strtok_r(nullptr,",",&end_token);
                 strcpy(user_,token2);
+
                 token2 = strtok_r(nullptr,",",&end_token);
                 strcpy(password_,token2);
+
                 if(strcmp(user_,user.c_str()) == 0){
                     if(strcmp(password_,password.c_str()) == 0){
                         actualSesion.direccion = direccion;
@@ -1612,7 +1619,7 @@ int verificarDatos(string user, string password, string direccion){
 }
 
 // -- LOGIN --
-int log_in(string direccion, string nombre, string user, string password){
+int log_entra(string direccion, string nombre, string user, string password){
     int index = buscarParticionP_E(direccion, nombre);
 
     if(index != -1){
@@ -1642,7 +1649,7 @@ int log_in(string direccion, string nombre, string user, string password){
         actualSesion.inicioJournal = mbr.MBR_partition[index].part_start + static_cast<int>(sizeof(SUPERBLOQUE));
         actualSesion.tipo_sistema = super.s_filesystem_type;
 
-        return verificarDatos(user,password, direccion);
+        return verificarDatos_login(user,password, direccion);
     }else{
         index = buscarParticion_Logica(direccion, nombre);
         if(index != -1){
@@ -1664,8 +1671,8 @@ int log_in(string direccion, string nombre, string user, string password){
             fclose(fp);
 
             actualSesion.inicioSuper = index + static_cast<int>(sizeof(EBR));
-            actualSesion.fit = getLogicFit(direccion,nombre);
-            return verificarDatos(user,password,direccion);
+            actualSesion.fit = obtenerLogic(direccion, nombre);
+            return verificarDatos_login(user,password,direccion);
         }
     }
     return 0;
@@ -1691,7 +1698,7 @@ void comando_login(string usr, string password, string id){
         if(!flag_login){
         if(flagId){
             int indiceID = index_IDmount(id);
-            int res = log_in(Arreglomount[indiceID].direccion, Arreglomount[indiceID].nombre, usr, password);
+            int res = log_entra(Arreglomount[indiceID].direccion, Arreglomount[indiceID].nombre, usr, password);
             if(res == 1){
                 flag_login = true;
                 cout << "\033[94mSesion iniciada con exito rotundo \033[0m" << endl;
@@ -1709,7 +1716,7 @@ void comando_login(string usr, string password, string id){
     }
 }
 
-
+// -- Ejecucion comando MKFS --
 void comando_Mkfs(string id, string type, string fs){
     //Este comando trabaja con el mount
     //datos bandera del comando
@@ -2115,6 +2122,7 @@ void PAUSE(vector<string> datos){
     
 }
 
+// -- MOUNT --
 void MOUNT(vector<string> datos){
     string auxName = "";
     string auxPath = "";
@@ -2159,6 +2167,7 @@ void MOUNT(vector<string> datos){
     }
 }
 
+// -- UNMOUNT --
 void UNMOUNT(vector<string> datos){
     string auxId = "";
 
@@ -2199,6 +2208,7 @@ void UNMOUNT(vector<string> datos){
     }
 }
 
+// -- MKFS --
 void MKFS(vector<string> datos){
     string auxId = "";
     string auxType = "full";
