@@ -22,7 +22,7 @@ using namespace std;
 // --  GLOBALES--
 //TODO: agregar el resto de comandos
 vector<string> TodosComandos = {"mkdisk", "rmdisk", "fdisk", "exec", "pause", "mount", "unmount", "mkfs",
-"login", "logout"};
+"login", "logout", "mkgrp", "rmgrp"};
 bool flag_login = false;
 void CreatePartitionPimari(int, char, string, char, string);
 void CreatePartitionExtend(int, char, string, char, string);
@@ -1695,6 +1695,444 @@ int log_entra(string direccion, string nombre, string user, string password){
     return 0;
 }
 
+//motodo para guardar en el jornal
+void guardarJournal(char* operacion,int tipo,int permisos,char *nombre,char *content){
+    SUPERBLOQUE super;
+    JOURNAL journal;
+
+    //llenamos el JOURNAL
+    strcpy(journal.Journal_Tipo_Operacion,operacion);
+    journal.Journal_tipo = tipo;
+    strcpy(journal.Journal_nombre,nombre);
+    strcpy(journal.Journal_contenido,content);
+    journal.Journal_fecha = time(nullptr);
+    journal.Journal_propietario = actualSesion.id_user;
+    journal.Journal_permisos = permisos;
+
+    FILE *fp = fopen(actualSesion.direccion.c_str(), "rb+");
+    //Buscar el ultimo journal
+    JOURNAL journalAux;
+    bool ultimo = false;
+
+
+    fseek(fp,actualSesion.inicioSuper,SEEK_SET);
+    fread(&super,sizeof(SUPERBLOQUE),1,fp);
+
+    //calculamos cuales seran los limites del journal
+    int inicio_journal = actualSesion.inicioSuper + static_cast<int>(sizeof(SUPERBLOQUE));
+    int final_journal = super.s_bm_inode_start;
+    
+    //ubicamos el punero del incio del journal
+    fseek(fp, inicio_journal, SEEK_SET);
+
+    while((ftell(fp) < final_journal) && !ultimo)
+    {   
+        //leemos el jorunal para asignarle el ultimo
+        fread(&journalAux, sizeof(JOURNAL), 1, fp);
+        if(journalAux.Journal_tipo != 0 && journalAux.Journal_tipo != 1)
+            ultimo = true;
+    }
+
+    fseek(fp,ftell(fp)- static_cast<int>(sizeof(JOURNAL)),SEEK_SET);
+    fwrite(&journal,sizeof(JOURNAL),1,fp);
+    fclose(fp);
+}
+
+
+int buscarBit(FILE *fp, char tipo, char fit){
+    SUPERBLOQUE super;
+
+    int inicio_bm = 0;
+    char tempBit = '0';
+    int bit_libre = -1;
+    int tam_bm = 0;
+
+    fseek(fp, actualSesion.inicioSuper, SEEK_SET);
+    fread(&super, sizeof(SUPERBLOQUE), 1, fp);
+
+    //identificamos tipos
+    if(tipo == 'I')
+    {
+        tam_bm = super.s_inodes_count;
+        inicio_bm = super.s_bm_inode_start;
+
+    }else if(tipo == 'B')
+    {
+        tam_bm = super.s_blocks_count;
+        inicio_bm = super.s_bm_block_start;
+    }
+
+    //---------------Tipo de ajuste a utilizar----------------
+    if(fit == 'F')
+    {//Primer ajuste
+        for(int i = 0; i < tam_bm; i++)
+        {
+            //aputnamos el bloque inicio
+            fseek(fp, inicio_bm + i,SEEK_SET);
+            tempBit = static_cast<char>(fgetc(fp));
+
+            if(tempBit == '0')
+            {
+                bit_libre = i;
+                return bit_libre;
+            }
+        }
+
+        if(bit_libre == -1)
+            return -1;
+
+    }else if(fit == 'B')
+    {//Mejor ajuste
+        int libres = 0;
+        int auxLibres = -1;
+
+        for(int i = 0; i < tam_bm; i++)
+        {//Primer recorrido
+            //nos ubicamos en cada bloque segun el tamaño del bm
+            fseek(fp,inicio_bm + i,SEEK_SET);
+            tempBit = static_cast<char>(fgetc(fp));
+
+            if(tempBit == '0')
+            {
+                libres++;
+                if(i+1 == tam_bm)
+                {
+                    if(auxLibres == -1 || auxLibres == 0)
+                        auxLibres = libres;
+                    else{
+                        if(auxLibres > libres)
+                            auxLibres = libres;
+                    }
+                    libres = 0;
+                }
+            //si el bit es 1
+            }else if(tempBit == '1')
+            {
+                //espacio libre
+                if(auxLibres == -1 || auxLibres == 0)
+                    auxLibres = libres;
+                else{
+                    if(auxLibres > libres)
+                        auxLibres = libres;
+                }
+                libres = 0;
+            }
+        }
+
+        for(int i = 0; i < tam_bm; i++)
+        {
+            //apuntamos el inicio de bloque para luago guardarlo
+            fseek(fp,inicio_bm + i, SEEK_SET);
+            tempBit = static_cast<char>(fgetc(fp));
+            if(tempBit == '0')
+            {
+                libres++;
+                if(i+1 == tam_bm)
+                    return ((i+1)-libres); //returnamos el bit donde empieza
+            }else if(tempBit == '1')
+            {
+                if(auxLibres == libres)
+                    return ((i+1) - libres);
+                libres = 0;
+            }
+        }
+
+        return -1;
+
+    }else if(fit == 'W')
+    {//Peor ajuste
+        int libres = 0;
+        int auxLibres = -1;
+
+        for (int i = 0; i < tam_bm; i++) 
+        {//Primer recorrido
+            fseek(fp,inicio_bm + i, SEEK_SET);
+            tempBit = static_cast<char>(fgetc(fp));
+
+            if(tempBit == '0')
+            {
+                libres++;
+                if(i+1 == tam_bm)
+                {
+                    if(auxLibres == -1 || auxLibres == 0)
+                        auxLibres = libres;
+                    else {
+                        if(auxLibres < libres)
+                            auxLibres = libres;
+                    }
+                    libres = 0;
+                }
+
+            }else if(tempBit == '1')
+            {
+                if(auxLibres == -1 || auxLibres == 0)
+                    auxLibres = libres;
+                else{
+                    if(auxLibres < libres)
+                        auxLibres = libres;
+                }
+                libres = 0;
+            }
+        }
+
+        for (int i = 0; i < tam_bm; i++)
+        {
+            fseek(fp,inicio_bm + i, SEEK_SET);
+            tempBit = static_cast<char>(fgetc(fp));
+
+            if(tempBit == '0')
+            {
+                libres++;
+                if(i+1 == tam_bm)
+                    return ((i+1) - libres);
+            }else if(tempBit == '1')
+            {
+                if(auxLibres == libres)
+                    return ((i+1) - libres);
+                libres = 0;
+            }
+        }
+        return -1;
+    }
+    return 0;
+}
+
+int buscarId_grupo(){
+    FILE *fp = fopen(actualSesion.direccion.c_str(),"rb+");
+
+    char cadena[400] = "\0";
+    int aux_id = -1;
+
+    SUPERBLOQUE super;
+    INODOTABLA inodo;
+    
+    fseek(fp,actualSesion.inicioSuper,SEEK_SET);
+    fread(&super,sizeof(SUPERBLOQUE),1,fp);
+    //Leemos el inodo del archivo users.txt
+    fseek(fp,super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)), SEEK_SET);
+    fread(&inodo,sizeof(INODOTABLA),1,fp);
+
+    for(int i = 0; i < 15; i++)
+    {
+        if(inodo.i_block[i] != -1)
+        {
+            BLOQUEARCHIVOS archivo;
+            //nuos ubicamos en el inicio de la tabla de bloques
+            fseek(fp,super.s_block_start,SEEK_SET);
+            for(int j = 0; j <= inodo.i_block[i]; j++)
+            {
+                fread(&archivo,sizeof(BLOQUEARCHIVOS),1,fp);
+            }
+            strcat(cadena,archivo.b_content);
+        }
+    }
+
+    fclose(fp);
+
+    //tokens para guardar en el user.txt
+    char *end_str;
+    char *token = strtok_r(cadena,"\n",&end_str);
+
+    while(token != nullptr)
+    {   //llenamos datos
+        char id[2];
+        char tipo[2];
+        char *end_token;
+        char *token2 = strtok_r(token,",",&end_token);
+
+        strcpy(id,token2);
+        if(strcmp(id,"0") != 0)
+        {//Verificar que no sea un U/G eliminado
+            token2 = strtok_r(nullptr,",",&end_token);
+            strcpy(tipo,token2);
+
+            if(strcmp(tipo,"G") == 0)
+            {//se encuentra la ps del U/G
+                aux_id = atoi(id);
+            }
+
+        }
+        token = strtok_r(nullptr,"\n",&end_str);
+    }
+    return ++aux_id;
+}
+
+void agregarUsuario_TXT(string datos){
+    FILE *fp = fopen(actualSesion.direccion.c_str(), "rb+");
+
+    SUPERBLOQUE super;
+    INODOTABLA inodo;
+    BLOQUEARCHIVOS archivo;
+    int blockIndex = 0;
+
+    //napuntamos el usuario ingresado.
+    fseek(fp, actualSesion.inicioSuper, SEEK_SET);
+    fread(&super, sizeof(SUPERBLOQUE), 1, fp);
+    //Leemos el inodo del archivo users.txt
+    fseek(fp, super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)), SEEK_SET);
+    fread(&inodo, sizeof(INODOTABLA), 1, fp);
+
+    for(int i = 0; i < 12; i++)
+    {
+        if(inodo.i_block[i] != -1)
+            blockIndex = inodo.i_block[i];//Ultimo bloque utilizado del archivo
+    }
+
+    fseek(fp, super.s_block_start + static_cast<int>(sizeof(BLOQUEARCHIVOS))*blockIndex, SEEK_SET);
+    fread(&archivo, sizeof(BLOQUEARCHIVOS), 1, fp);
+    
+    int usando = static_cast<int>(strlen(archivo.b_content));
+    int espacioLibre = 63 - usando;
+
+    if(datos.length() <= espacioLibre)
+    {
+        strcat(archivo.b_content,datos.c_str());
+        fseek(fp, super.s_block_start + static_cast<int>(sizeof(BLOQUEARCHIVOS))*blockIndex, SEEK_SET);
+        fwrite(&archivo, sizeof(BLOQUEARCHIVOS), 1, fp);
+
+        //leemos el archivo users.txt
+        fseek(fp, super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)), SEEK_SET);
+        fread(&inodo, sizeof(INODOTABLA), 1, fp);
+
+        //tamaño del inodo
+        inodo.i_size = inodo.i_size + datos.length();
+        inodo.i_mtime = time(nullptr);
+
+        fseek(fp, super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)), SEEK_SET);
+        fwrite(&inodo, sizeof(INODOTABLA), 1, fp);
+    }else{
+        string val = "";
+        string val2 = "";
+        int i = 0;
+
+        //cargamos las variables auxiliares
+        for(i = 0; i < espacioLibre; i++)
+            val += datos.at(i);
+
+        for(; i < datos.length(); i++)
+            val2  += datos.at(i);
+
+        //Guardamos lo que cabe en el primer bloque
+        strcat(archivo.b_content, val.c_str());
+        fseek(fp, super.s_block_start + static_cast<int>(sizeof(BLOQUEARCHIVOS))*blockIndex, SEEK_SET);
+        fwrite(&archivo, sizeof(BLOQUEARCHIVOS), 1, fp);
+
+        BLOQUEARCHIVOS auxArchivo;
+
+        strcpy(auxArchivo.b_content, val2.c_str());
+        int bit = buscarBit(fp, 'B', actualSesion.fit);
+        /*Guardamos el bloque en el bitmap y en la tabla de bloques*/
+        fseek(fp, super.s_bm_block_start + bit, SEEK_SET);
+        //escribimos el caracter en el archivo
+        fputc('2', fp);
+        fseek(fp,super.s_block_start + (static_cast<int>(sizeof(BLOQUEARCHIVOS))*bit),SEEK_SET);
+        fwrite(&auxArchivo,sizeof(BLOQUEARCHIVOS),1,fp);
+
+        //Guardamos el modificado del inodo
+        fseek(fp, super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)), SEEK_SET);
+        fread(&inodo, sizeof(INODOTABLA), 1, fp);
+
+        //llenamos el bloque de inodos
+        inodo.i_size = inodo.i_size + datos.length();
+        inodo.i_mtime = time(nullptr);
+        inodo.i_block[blockIndex] = bit;
+
+        fseek(fp, super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)), SEEK_SET);
+        fwrite(&inodo, sizeof(INODOTABLA),1,fp);
+
+        //Guardamos la nueva cantidad de bloques libres y el primer bloque libre
+        super.s_first_blo = super.s_first_blo + 1;
+        super.s_free_blocks_count = super.s_free_blocks_count - 1;
+        fseek(fp, actualSesion.inicioSuper, SEEK_SET);
+        fwrite(&super, sizeof(SUPERBLOQUE), 1, fp);
+    }
+    fclose(fp);
+}
+
+// - eliminar grupo -
+void eliminarGrupo(string name){
+    FILE *fp = fopen(actualSesion.direccion.c_str(),"rb+");
+
+    SUPERBLOQUE super;
+    INODOTABLA inodo;
+    BLOQUEARCHIVOS archivo;
+
+    int col = 1;
+    char actual;
+    int posicion = 0;
+    int numBloque = 0;
+    int id = -1;
+    char tipo = '\0';
+    string grupo = "";
+    string palabra = "";
+    bool flag = false;
+
+
+    fseek(fp,actualSesion.inicioSuper,SEEK_SET);
+    fread(&super,sizeof(SUPERBLOQUE),1,fp);
+    //Nos posicionamos en el inodo del archivo users.txt
+    fseek(fp,super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)),SEEK_SET);
+    fread(&inodo,sizeof(INODOTABLA),1,fp);
+
+    for (int i = 0; i < 12; i++) 
+    {
+        if(inodo.i_block[i] != -1)
+        {
+            //ubicamos ell i nodos del del archvo users.txt
+            fseek(fp,super.s_block_start + static_cast<int>(sizeof(BLOQUEARCHIVOS))*inodo.i_block[i],SEEK_SET);
+            fread(&archivo,sizeof(BLOQUEARCHIVOS),1,fp);
+
+            for(int j = 0; j < 63; j++)
+            {
+                //ubicamos carpeta
+                actual = archivo.b_content[j];
+                if(actual=='\n')
+                {
+                    if(tipo == 'G')
+                    {
+                        //ubicamos el grupo 
+                        grupo = palabra;
+                        if(strcmp(grupo.c_str(),name.c_str()) == 0)
+                        {
+                            fseek(fp,super.s_block_start+static_cast<int>(sizeof(BLOQUEARCHIVOS))*numBloque,SEEK_SET);
+                            fread(&archivo,sizeof(BLOQUECARPETAS),1,fp);
+
+                            archivo.b_content[posicion] = '0';
+                            fseek(fp,super.s_block_start+static_cast<int>(sizeof(BLOQUEARCHIVOS))*numBloque,SEEK_SET);
+                            fwrite(&archivo,sizeof(BLOQUEARCHIVOS),1,fp);
+
+                            cout << "\033[94mGrupo eliminado con exito\033[0m" << endl;
+                            flag = true;
+                            break;
+                        }
+                    }
+                    col = 1;
+                    palabra = "";
+
+                }else if(actual != ',')
+                {
+                    palabra += actual;
+                    col++;
+                }else if(actual == ',')
+                {
+                    if(col == 2)
+                    {
+                        id = atoi(palabra.c_str());
+                        posicion = j-1;
+                        numBloque = inodo.i_block[i];
+                    }
+                    else if(col == 4)
+                        tipo = palabra[0];
+                    col++;
+                    palabra = "";
+                }
+            }
+            if(flag)
+                break;
+        }
+    }
+    fclose(fp);
+}
 
 // -- Ejecucion del comando login
 void comando_login(string usr, string password, string id){
@@ -1730,6 +2168,71 @@ void comando_login(string usr, string password, string id){
        cout << "\033[31mERROR, Particion Montada no a sido formateada para el archivo users.txt\033[0m" << endl; 
     }
 }
+
+// -- ejecucion RMGROUP --
+void comando_RMGRP(string name){
+    //TODO: agregar colores y cambios de variables
+    char replacement[] = "";
+    string nombreGrupo;
+    nombreGrupo = name.replace(0, 1, replacement);
+    nombreGrupo = name.replace(name.size()-1, 1, replacement);
+
+    if(flag_login){
+        if(actualSesion.id_user == 1 && actualSesion.id_grp == 1){//Usuario root
+            int grupo = buscarGrupo(nombreGrupo);
+            if(grupo != -1){
+                eliminarGrupo(nombreGrupo);
+            }else
+                cout << "\033[31mERROR el grupo no existe" << endl;
+        }else
+           cout << "\033[31mERROR solo el usuario root puede ejecutar este comando\033[0m" << endl;
+    }else
+        cout << "\033[31mERROR necesita iniciar sesion para poder ejecutar este comando\033[0m" << endl;
+}
+
+// -- ejecucion MKGRP --
+void comando_MKGRP(string name){
+    char replacement[] = "";
+    string nombreGrupo;
+    nombreGrupo = name.replace(0, 1, replacement);
+    nombreGrupo = name.replace(name.size()-1, 1, replacement);
+
+    if(flag_login)
+    {
+        if(actualSesion.id_user == 1 && actualSesion.id_grp == 1)//Usuario root
+        {
+            if(nombreGrupo.length() <= 10)
+            {
+                int grupo = buscarGrupo(nombreGrupo);
+                if(grupo == -1)
+                {
+                    int idGrupo = buscarId_grupo();
+                    string nuevoGrupo = to_string(idGrupo)+",G,"+nombreGrupo+"\n";
+                    agregarUsuario_TXT(nuevoGrupo);
+                    cout << "Grupo creado con exito "<< endl;
+                    cout << "\033[94m---- Grupo creado con exito ---.\033[0m" << endl;
+                    //Guardamos el registro en el journal si es un EXT3
+                    if(actualSesion.tipo_sistema ==3)
+                    {
+                        char aux[64];
+                        char operacion[10];
+                        char content[2];
+
+                        strcpy(aux,nuevoGrupo.c_str());
+                        strcpy(operacion,"mkgrp");
+                        memset(content,0,2);
+                        guardarJournal(operacion,0  ,0,aux,content);
+                    }
+                }else
+                    cout << "\033[31mERROR ya existe un grupo con ese nombre\033[0m" << endl;
+            }else
+                cout << "\033[31mERROR el nombre del grupo no puede exceder los 10 caracters\033[0m" << endl;
+        }else
+            cout << "\033[31mERROR solo el usuario root puede ejecutar este comando\033[0m" << endl;
+    }else
+        cout << "\033[31mERROR necesita iniciar sesion para poder ejecutar este comando\033[0m" << endl;
+}
+
 
 //-- ejecucion LOGOUT -- 
 void logOUT(){
@@ -2350,6 +2853,87 @@ void LOGOUT(vector<string> datos){
     logOUT();
 }
 
+void MKGRP(vector<string> datos){
+    string auxName = "";
+
+    for (int i = 1; i < datos.size(); i++)
+    {
+        vector<string> tipoP;
+        tipoP = splitParam(datos.at(i));
+        if (tipoP.at(0) == "SIN SIMBOLO" || tipoP.at(0) == "SIN PUNTOS")
+        {
+            if (tipoP.at(0) == "SIN SIMBOLO")
+            {
+                cout << "Falta el simbolo ~, omitimos linea" << endl;
+                break;
+            }else{
+                cout << "Falta el simbolo :, omitimos linea" << endl;
+                break;
+            }
+        }else{
+            string coman = minusculas(tipoP.at(0));
+            string datoComan = tipoP.at(2);
+
+            if (coman == "-name")
+            {
+                auxName = datoComan;
+            }else{
+                cout << "\033[94mERROR, no es comando valido\033[0m" << endl;
+                break;
+            }
+        }
+    }
+
+    if (auxName != "")
+    {
+        comando_MKGRP(auxName);
+    }else
+    {
+        cout << "\033[94mERROR, no se recibio algun parametro obligatorio.\033[0m" << endl;
+    }
+}
+
+// -- RMGRP --
+void RMGRP(vector<string> datos){
+    string auxName = "";
+
+    for (int i = 1; i < datos.size(); i++)
+    {
+        vector<string> tipoP;
+        tipoP = splitParam(datos.at(i));
+        if (tipoP.at(0) == "SIN SIMBOLO" || tipoP.at(0) == "SIN PUNTOS")
+        {
+            if (tipoP.at(0) == "SIN SIMBOLO")
+            {
+                cout << "Falta el simbolo ~, omitimos linea" << endl;
+                break;
+            }else{
+                cout << "Falta el simbolo :, omitimos linea" << endl;
+                break;
+            }
+        }else{
+            string coman = minusculas(tipoP.at(0));
+            string datoComan = tipoP.at(2);
+
+            if (coman == "-name")
+            {
+                auxName = datoComan;
+            }else{
+                cout << "\033[94mERROR, no es comando valido\033[0m" << endl;
+                break;
+            }
+        }
+    }
+
+    if (auxName != "")
+    {
+        comando_RMGRP(auxName);
+    }else
+    {
+        cout << "\033[94mERROR, no se recibio algun parametro obligatorio.\033[0m" << endl;
+    }
+}
+
 //--comandos
 void mandaraComando(string comando, vector<string> datos){
     if (comando == "mkdisk")
@@ -2451,9 +3035,14 @@ void mandaraComando(string comando, vector<string> datos){
     }else if (comando == "logout")
     {
         LOGOUT(datos);
+    }else if (comando == "mkgrp")
+    {
+        MKGRP(datos);
+    }else if (comando == "rmgrp")
+    {
+        RMGRP(datos);
     }
-    
-    
+     
 }
 
 int main(){
