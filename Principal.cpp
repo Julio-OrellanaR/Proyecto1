@@ -780,7 +780,7 @@ void createPartitionLogica(int size, char unit, string pathPart, char fit, strin
         size_bytes = size * 1024;
     }
 
-    
+    cout << "tamaño particion "<< size_bytes << endl;
     FILE *fp;
     MBR mbr;
 
@@ -835,7 +835,7 @@ void createPartitionLogica(int size, char unit, string pathPart, char fit, strin
                     }
 
                     //byte en el que estoy mas el tamaño que necesito me da el tamaño que quiero par la nueva particion
-                    int tamanioNeed = ebr.EBR_part_start + ebr.EBR_part_size;
+                    int tamanioNeed = ebr.EBR_part_start + ebr.EBR_part_size + size_bytes;
 
                     //comprobamos si el tamaño necesario es menor de la particion que se creara
                     if (tamanioNeed <= (mbr.MBR_partition[indicaExtendida].part_size + mbr.MBR_partition[indicaExtendida].part_start))
@@ -858,7 +858,9 @@ void createPartitionLogica(int size, char unit, string pathPart, char fit, strin
                         strcpy(ebr.EBR_part_name, name.c_str());
                         fwrite(&ebr,sizeof(EBR),1,fp);
                         //tenemos guardada la nueva particion logica
-                        cout << "Particion logica creada con exito "<< endl;
+                        cout << "Espacio necesario: "<< tamanioNeed << endl;
+                        cout << "Espacio Existente: " << mbr.MBR_partition[indicaExtendida].part_size + mbr.MBR_partition[indicaExtendida].part_start << endl;
+                        cout << "  ---- Particion logica creada con exito ----\n "<< endl;
                     }else{
                         cout << "ERROR la particion logica a crear excede el espacio disponible de la particion extendida" << endl;
                     } 
@@ -4165,28 +4167,37 @@ vector<string> splitRuta(string line){
 
 // -- SPLIT --
 void crearVerificar_rutas(string ruta){
-    cout << "pinche ruta: " << ruta << endl;
     string tempPath = path;
     vector<string> nuevo;
     nuevo = splitRuta(ruta);
-    cout << nuevo.size() << " -- " << nuevo.at(0) << endl;
     
     if ( nuevo.size() == 2){
         tempPath;
-        cout << tempPath << "simple" <<endl;
         if (mkdir(tempPath.c_str(), 0777) == -1)cerr << "Error :  " << strerror(errno) << endl;
             else cout << "Directory created"<<endl;
     }else{
         for(int i=1; i < nuevo.size()-1; i++)
         {
             tempPath += "/" + nuevo[i];
-            cout << tempPath << " --" << endl;
             if (mkdir(tempPath.c_str(), 0777) == -1)cerr << "Error :  " << strerror(errno) << endl;
                 else cout << "Directory created"<<endl;
         }
     }
 }
 
+vector<string> splitExec(string line){
+    string temp;
+    vector<string> tmp{};
+    stringstream input_stringstream(line);
+
+    int contador = 0;
+    while (getline(input_stringstream, temp, '#'))
+    {
+        tmp.push_back(temp);
+        contador ++;
+    }
+    return tmp;
+}
 
 //--SPLIT  PARAMETROS--
 vector<string> splitParam(string linea){
@@ -4355,7 +4366,7 @@ void FDISK(vector<string> datos){
     string rutaTotal = "";
     char fit = 0;
     int size_part = 0;
-    char unit = 'B';
+    char unit = 0;
     char typeFd = 'P';
     string name = "";
 
@@ -4377,6 +4388,7 @@ void FDISK(vector<string> datos){
         }else{
             string coman = minusculas(tipoP.at(0));
             string datoComan = tipoP.at(2);
+            string datoComanMinus = minusculas(tipoP.at(2));
             if (coman == "-path")
             {
                 rutaTotal = path + datoComan;
@@ -4392,36 +4404,36 @@ void FDISK(vector<string> datos){
 
             }else if (coman == "-unit")
             {   
-                if (datoComan == "B")
+                if (datoComanMinus == "b")
                 {
                     //size
                     unit = 'B';
-                }else if (datoComan == "K")
+                }else if (datoComanMinus == "k")
                 {
                     //1024 * size
                     unit = 'K';
-                }else if (datoComan == "M")
+                }else if (datoComanMinus == "m")
                 {
                     //1024 * 1024 * size
                     unit = 'M';
                 }else{
-                    cout << "parametro invalido" << endl;
+                    cout << "parametro invalido en -size \n" << endl;
                     break;
                 }
                 
             }else if (coman == "-type")
             {
-                if (datoComan == "P")
+                if (datoComanMinus == "p")
                 {
                     typeFd = 'P';
-                }else if (datoComan == "E")
+                }else if (datoComanMinus == "e")
                 {
                     typeFd = 'E';
-                }else if (datoComan == "L")
+                }else if (datoComanMinus == "l")
                 {
                     typeFd = 'L';
                 }else{
-                    cout << "parametro invalido" << endl;
+                    cout << "parametro invalido en el -type \n" << endl;
                     break;
                 }
             }else if (coman == "-fit")
@@ -4451,7 +4463,7 @@ void FDISK(vector<string> datos){
                 {
                     continue;
                 }else{
-                    cout << "parametro invalido" << endl;
+                    cout << "parametro invalido -delete" << endl;
                     break;
                 }
                 
@@ -4460,7 +4472,7 @@ void FDISK(vector<string> datos){
                 name = datoComan;
             }else if (coman == "-add")
             {
-                name = datoComan;
+                continue;
             }else{
                 cout << "comando invalido en el FDisk" << endl;
             }
@@ -5035,8 +5047,19 @@ void mandaraComando(string comando, vector<string> datos){
                             {
                                 continue;
                             }else{
+                                
+                                string comentario = "#";
+
                                 vector<string> var;
-                                var = split(linea);
+
+                                if (strstr(linea.c_str(), comentario.c_str()))
+                                {
+                                    vector<string> temp{};
+                                    temp = splitExec(linea);
+                                    var = split(temp[0]);
+                                }else{
+                                    var = split(linea);
+                                }
 
                                 vector<string> comandosE{};
 
