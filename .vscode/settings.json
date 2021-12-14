@@ -23,6 +23,7 @@
         "unordered_map": "cpp",
         "unordered_set": "cpp",
         "forward_list": "cpp",
-        "regex": "cpp"
+        "regex": "cpp",
+        "string_view": "cpp"
     }
 }
