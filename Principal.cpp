@@ -214,8 +214,9 @@ void crearDisco(DISCO dc){
     if (dc.unit == 'k') //kilobyte
     {
         tamanio = 1024 * dc.size;
-    }else{  //megabyte
-        tamanio == 1024 * 1024 * dc.size;
+    }else{  //megabyte 
+        tamanio = 1024 * 1024 * dc.size;
+        cout << "tamanio" << tamanio << endl;
     }
 
     file = fopen(rutac, "wb");
@@ -3982,12 +3983,7 @@ void comando_MKUSR(string auxUsr, string auxPass, string auxGrupo){
 
 // -- ejecucion RMGROUP --
 void comando_RMGRP(string name){
-    //TODO: agregar colores y cambios de variables
-    char replacement[] = "";
-    string nombreGrupo;
-    nombreGrupo = name.replace(0, 1, replacement);
-    nombreGrupo = name.replace(name.size()-1, 1, replacement);
-
+    string nombreGrupo = name;
     if(flag_login){
         if(actualSesion.id_user == 1 && actualSesion.id_grp == 1){//Usuario root
             int grupo = buscarGrupo(nombreGrupo);
@@ -4003,10 +3999,7 @@ void comando_RMGRP(string name){
 
 // -- ejecucion MKGRP --
 void comando_MKGRP(string name){
-    char replacement[] = "";
-    string nombreGrupo;
-    nombreGrupo = name.replace(0, 1, replacement);
-    nombreGrupo = name.replace(name.size()-1, 1, replacement);
+    string nombreGrupo = name;
 
     if(flag_login)
     {
@@ -4238,6 +4231,14 @@ vector<string> splitParam(string linea){
     
 }
 
+string SplitCExec (const string& str) {
+  unsigned found = str.find_first_of("\"");
+  string var = str.substr(found+1);
+  unsigned found1 = var.find_last_of("\"");
+  
+  return var.substr(0, found1);
+}
+
 //-- Borrar disco (RMdisk) --
 int BorrarDisco(string path){
     if(remove(path.c_str()) != 0 )
@@ -4303,11 +4304,9 @@ void MKDISK(vector<string> datos){
                 if (pal == "k")
                 {
                     Discvar.unit = 'k';
-
                 }else if (pal == "m")
                 {
                     Discvar.unit = 'm';
-
                 }else{
                     cout<< "error de parametro" << endl;
                 }
@@ -4316,9 +4315,17 @@ void MKDISK(vector<string> datos){
 
             }else if (coman == "-path")
             {
-                Discvar.path = path + datoComan; 
-                
-                crearVerificar_rutas(datoComan);
+                string ident = "\"";
+                if(strstr(datoComan.c_str(), ident.c_str())){
+                    cout << "se encontro " << endl;
+                    string uno = SplitCExec(datoComan);
+                    Discvar.path = path + uno; 
+                    crearVerificar_rutas(uno);
+
+                }else{
+                    Discvar.path = path + datoComan; 
+                    crearVerificar_rutas(datoComan);
+                }
 
                 cout << "path: " << tipoP.at(2) << endl;
             }else{
@@ -4349,10 +4356,19 @@ void RMDISK(vector<string> datos){
             }
         }else{
             string coman = minusculas(tipoP.at(0));
-            string datoComan = path + tipoP.at(2);
+            string datoComan = tipoP.at(2);
             if (coman == "-path")
             {
-                BorrarDisco(datoComan);
+                string ident = "\"";
+                if(strstr(datoComan.c_str(), ident.c_str())){
+                    string uno = SplitCExec(datoComan);
+                    uno = path + uno;
+                    BorrarDisco(uno);
+
+                }else{
+                    datoComan = path + datoComan;
+                    BorrarDisco(datoComan);
+                }
             }
             
         }
@@ -4719,7 +4735,13 @@ void MKGRP(vector<string> datos){
 
             if (coman == "-name")
             {
-                auxName = datoComan;
+                string ident = "\"";
+                if(strstr(datoComan.c_str(), ident.c_str())){
+                    string uno = SplitCExec(datoComan);
+                    auxName = uno;
+                }else{
+                    auxName = datoComan;
+                }
             }else{
                 cout << "\033[94mERROR, no es comando valido\033[0m" << endl;
                 break;
@@ -4760,7 +4782,13 @@ void RMGRP(vector<string> datos){
 
             if (coman == "-name")
             {
-                auxName = datoComan;
+                string ident = "\"";
+                if(strstr(datoComan.c_str(), ident.c_str())){
+                    string uno = SplitCExec(datoComan);
+                    auxName = uno;
+                }else{
+                    auxName = datoComan;
+                }
             }else{
                 cout << "\033[94mERROR, no es comando valido\033[0m" << endl;
                 break;
@@ -4804,10 +4832,24 @@ void MKUSR(vector<string> datos){
 
             if (coman == "-grp")
             {
-                auxGrupo = datoComan;
+                string ident = "\"";
+                if(strstr(datoComan.c_str(), ident.c_str())){
+                    string uno = SplitCExec(datoComan);
+                    auxGrupo = uno;
+                }else{
+                    auxGrupo = datoComan;
+                }
+                
             }else if (coman == "-usr")
             {   
-                auxUsr = datoComan;
+                string ident = "\"";
+                if(strstr(datoComan.c_str(), ident.c_str())){
+                    string uno = SplitCExec(datoComan);
+                    auxUsr = uno;
+                }else{
+                    auxUsr = datoComan;
+                }
+
             }else if (coman == "-pwd")
             {
                 auxPass = datoComan;
@@ -5031,7 +5073,7 @@ void mandaraComando(string comando, vector<string> datos){
                 string datoComan = tipoP[2];
 
                 if(coman == "-path"){
-
+                    
                     if (datoComan.substr(datoComan.find_last_of(".")+1) == "sh")
                     {
                         ifstream archivo(datoComan.c_str());
