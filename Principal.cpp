@@ -24,7 +24,7 @@ using namespace std;
 // --  GLOBALES--
 //TODO: agregar el resto de comandos
 vector<string> TodosComandos = {"mkdisk", "rmdisk", "fdisk", "exec", "pause", "mount", "unmount", "mkfs",
-"login", "logout", "mkgrp", "rmgrp", "mkusr", "rmusr", "chmod", "mkfile", "mkdir"};
+"login", "logout", "mkgrp", "rmgrp", "mkusr", "rmusr", "chmod", "mkfile", "mkdir", "rep", "pause"};
 bool flag_login = false;
 void CreatePartitionPimari(int, char, string, char, string);
 void CreatePartitionExtend(int, char, string, char, string);
@@ -3700,6 +3700,599 @@ int Carpeta_crear(string ruta, bool p){
     return response;
 }
 
+string SplitFolder(const string& str)
+{
+  size_t found;
+  cout << "Splitting: " << str << endl;
+  found=str.find_last_of("/\\");
+  cout << " folder: " << str.substr(0,found) << endl;
+  return str.substr(0,found);
+}
+
+string ObtenerExtension(string direccion){
+    string aux = direccion;
+    string delimiter = ".";
+    size_t pos = 0;
+    while((pos = aux.find(delimiter))!=string::npos){
+        aux.erase(0,pos+delimiter.length());
+    }
+    return string(aux);
+}
+
+void REPORTE_DISK(string auxPath, string auxId){
+    FILE *fp;
+    FILE *graphDot;
+
+    string extension = auxPath.substr(auxPath.find_last_of(".")+1);
+    string destino = "";
+    string ruta = "";
+
+    //bandera del ID
+    bool flagId = false;
+
+    for (int i = 0; i < Arreglomount.size(); i++)
+    {
+        if (auxId == Arreglomount[i].id)
+        {
+            ruta = Arreglomount[i].direccion;
+            flagId = true;
+            break;
+        }
+    }
+    
+
+    destino = auxPath;
+    if (flagId)
+    {
+        //abrimos la ruta del ID
+        if((fp = fopen(ruta.c_str(), "r")))
+        {
+            //emepzamos a llenar la estructura del diagraph, con el bloque principal
+            graphDot = fopen("grafica.dot", "w");
+            fprintf(graphDot,"digraph G{\n\n");
+            fprintf(graphDot, "  tbl [\n    shape=box\n    label=<\n");
+            fprintf(graphDot, "     <table border=\'0\' cellborder=\'2\' width=\'600\' height=\"200\" color=\'LIGHTSTEELBLUE\'>\n");
+            fprintf(graphDot, "     <tr>\n");
+            fprintf(graphDot, "     <td height=\'200\' width=\'100\'> MBR </td>\n");
+
+            MBR mbr;
+            //apuntamos y leemos el mbr
+            fseek(fp, 0, SEEK_SET);
+            fread(&mbr, sizeof(MBR), 1, fp);
+
+            int tamanio = mbr.MBR_tamanio;
+            double espacioUsado = 0;
+            
+            //recorremos las 4 particiones
+            for(int i = 0; i < 4; i++)
+            {
+                //tamaño termoral de cada particion
+                int temp_size = mbr.MBR_partition[i].part_size;
+
+                if(mbr.MBR_partition[i].part_start != -1)
+                {//Particion vacia
+                    double porcet = (temp_size*100)/tamanio;
+                    double porcet_2 = (porcet*500)/100;
+                    espacioUsado += porcet;
+
+                    if(mbr.MBR_partition[i].part_status != '1')
+                    {
+                        if(mbr.MBR_partition[i].part_type == 'P')
+                        {
+                            //llenamos con los datos de las pimarias por medio de abstraccion de variables
+                            fprintf(graphDot, "     <td height=\'200\' width=\'%.1f\'>PRIMARIA <br/> Ocupado: %.1f%c</td>\n",porcet_2,porcet,'%');
+                            //Verificar que no haya espacio fragmentado
+                            if(i!=3)
+                            {
+                                //calculamos los espacios
+                                int data1 = mbr.MBR_partition[i].part_start + mbr.MBR_partition[i].part_size;
+                                int punto2 = mbr.MBR_partition[i+1].part_start;
+
+                                if(mbr.MBR_partition[i+1].part_start != -1)
+                                {
+                                    if((punto2-data1)!=0)
+                                    {//Hay fragmentacion
+                                        int fragmentacion = punto2-data1;
+                                        double porcet = (fragmentacion*100)/tamanio;
+                                        double porcet_2 = (porcet*500)/100;
+                                        fprintf(graphDot,"     <td height=\'200\' width=\'%.1f\'>LIBRE<br/> Ocupado: %.1f%c</td>\n",porcet_2,porcet,'%');
+                                    }
+                                }
+
+                            }else{
+                                //calculos de tamaños
+                                int data1 = mbr.MBR_partition[i].part_start + mbr.MBR_partition[i].part_size;
+                                int mbr_size = tamanio + (int)sizeof(MBR);
+
+                                if((mbr_size-data1)!=0){//Libre
+                                    double libre = (mbr_size - data1) + sizeof(MBR);
+                                    double porcet = (libre*100)/tamanio;
+                                    double porcet_2 = (porcet*500)/100;
+                                    fprintf(graphDot, "     <td height=\'200\' width=\'%.1f\'>LIBRE<br/> Ocupado: %.1f%c</td>\n",porcet_2, porcet, '%');
+                                }
+                            }
+                        }else{//Extendida
+                            EBR ebr;
+
+                            fprintf(graphDot,"     <td  height=\'200\' width=\'%.1f\'>\n     <table border=\'0\'  height=\'200\' WIDTH=\'%.1f\' cellborder=\'1\'>\n",porcet,porcet);
+                            fprintf(graphDot,"     <tr>  <td height=\'60\' colspan=\'15\'>EXTENDIDA</td>  </tr>\n     <tr>\n");
+                            fseek(fp, mbr.MBR_partition[i].part_start,SEEK_SET); //apuntamos al inico de cara particion
+                            fread(&ebr,sizeof(EBR),1,fp);//leemos el EBR resultante
+
+                            if(ebr.EBR_part_fit != 0)
+                            {//Si hay mas de alguna logica
+                                fseek(fp, mbr.MBR_partition[i].part_start,SEEK_SET);
+                                while(fread(&ebr,sizeof (EBR),1,fp)!=0 && (ftell(fp) < (mbr.MBR_partition[i].part_start + mbr.MBR_partition[i].part_size)))
+                                {//entramos a la lectura del EBR, este recorrera mientras encaje en particiones y tamaño
+                                    temp_size = ebr.EBR_part_size;
+                                    porcet = (temp_size*100)/tamanio;
+
+                                    if(porcet!=0)
+                                    {//porcentaje ocupado
+                                        if(ebr.EBR_part_status != '1')
+                                        {//si esta ocupada la logica
+                                            fprintf(graphDot, "     <td height=\'140\'>EBR</td>\n");
+                                            fprintf(graphDot, "     <td height=\'140\'>LOGICA<br/>Ocupado: %.1f%c</td>\n",porcet,'%');
+                                        }else{//Espacio no asignado
+                                            fprintf(graphDot, "      <td height=\'150\'>LIBRE 1 <br/> Ocupado: %.1f%c</td>\n",porcet,'%');
+                                        }
+                                        if(ebr.EBR_part_next==-1)
+                                        {//calculamos las que estan libres en tamaños
+                                            temp_size = (mbr.MBR_partition[i].part_start + mbr.MBR_partition[i].part_size) - (ebr.EBR_part_start + ebr.EBR_part_size);
+                                            porcet = (temp_size*100)/tamanio;
+                                            if(porcet!=0){
+                                                fprintf(graphDot, "     <td height=\'150\'>LIBRE 2<br/> Ocupado: %.1f%c </td>\n",porcet,'%');
+                                            }
+                                            break;
+                                        }else
+                                            //apuntamos a las vacias
+                                            fseek(fp, ebr.EBR_part_next, SEEK_SET);
+                                    }
+                                }
+                            }else{//porcentaje de la logica oucapda
+                                fprintf(graphDot,"     <td height=\'140\'> Ocupado %.1f%c</td>",porcet,'%');
+                            }
+                            fprintf(graphDot,"     </tr>\n     </table>\n     </td>\n");
+                            //Verificar que no haya espacio fragmentado
+                            if(i!=3)
+                            {//particion 3
+                                //tamaños en esta particion
+                                int data1 = mbr.MBR_partition[i].part_start + mbr.MBR_partition[i].part_size;
+                                int punto2 = mbr.MBR_partition[i+1].part_start;
+
+                                if(mbr.MBR_partition[i+1].part_start != -1)
+                                {//si no estan ocupadas
+                                    if((punto2-data1)!=0)
+                                    {//Hay fragmentacion
+                                        int fragmentacion = punto2-data1;
+                                        double porcet = (fragmentacion*100)/tamanio;
+                                        double porcet_2 = (porcet*500)/100;
+                                        fprintf(graphDot,"     <td height=\'200\' width=\'%.1f\'>LIBRE<br/> Ocupado: %.1f%c</td>\n",porcet_2,porcet,'%');
+                                    }
+                                }
+                            }else{//particion 4
+                                int data1 = mbr.MBR_partition[i].part_start + mbr.MBR_partition[i].part_size;
+                                int mbr_size = tamanio + (int)sizeof(MBR);
+
+                                if((mbr_size-data1)!=0)
+                                {//Libre, fragmentacion
+                                    double libre = (mbr_size - data1) + sizeof(MBR);
+                                    double porcet = (libre*100)/tamanio;
+                                    double porcet_2 = (porcet*500)/100;
+                                    fprintf(graphDot, "     <td height=\'200\' width=\'%.1f\'>LIBRE<br/> Ocupado: %.1f%c</td>\n",porcet_2, porcet, '%');
+                                }
+                            }
+                        }
+                    }else{//Espacio no asignado
+                        fprintf(graphDot,"     <td height=\'200\' width=\'%.1f\'>LIBRE <br/> Ocupado: %.1f%c</td>\n",porcet_2,porcet,'%');
+                    }
+                }
+            }
+            //cierre de la grafica
+            fprintf(graphDot,"     </tr> \n     </table>        \n>];\n\n}");
+            fclose(graphDot);
+            fclose(fp);
+            string comando = "dot -T"+ ObtenerExtension(auxPath) +" grafica.dot -o " + destino;
+            system(comando.c_str());
+            cout << "\033[31m\n ---- Reporte DISK generado con exito ----\n\033[0m" << endl;
+        }else{
+            cout << "\033[94m\n ... Error, no existe el disco ...\n\033[0m" << endl;
+        }
+    }else
+    {
+        cout << "\033[94m\n ... Error, no se monto la particion ...\n\033[0m" << endl;
+    }
+}
+
+void REPORTE_MBR(string auxPath, string auxId){
+    string destino = auxPath;
+    FILE *fp;
+    FILE *graphDot;
+    bool flagId = false;
+
+    //tipo de extension
+    string extension = auxPath.substr(auxPath.find_last_of(".")+1);
+    string ruta = "";
+
+    //buscamos el ID del Mout
+    for (int i = 0; i < Arreglomount.size(); i++)
+    {
+        if (auxId == Arreglomount[i].id)
+        {
+            ruta = Arreglomount[i].direccion;
+            flagId = true;
+            break;
+        }
+    }
+
+    if(flagId)
+    {
+        if((fp = fopen(ruta.c_str(),"r")))
+        {
+            //llenado de la parte principal
+            //graphDot se utiliza par el diagraph
+            graphDot = fopen("grafica.dot", "w");
+            //fprintf fuciona para ir agrgando lineas al diagrama
+            fprintf(graphDot,"digraph G{ \n");
+            fprintf(graphDot,"subgraph cluster{\n label=\"MBR\"");
+            fprintf(graphDot,"\ntbl[shape=box,label=<\n");
+            fprintf(graphDot,"<table border=\'0\' cellborder=\'1\' cellspacing=\'0\' width=\'300\'  height=\'200\' >\n");
+            fprintf(graphDot, "<tr>  <td width=\'150\'> <b>Nombre</b> </td> <td width=\'150\'> <b>Valor</b> </td>  </tr>\n");
+            
+            MBR mbr;
+            fseek(fp, 0, SEEK_SET);
+            fread(&mbr, sizeof(MBR), 1, fp);
+
+            int tamanio = mbr.MBR_tamanio;
+
+            //el porcentaje d es la llamada del tamaño
+            fprintf(graphDot,"<tr>  <td><b>mbr_tamaño</b></td><td>%d</td>  </tr>\n",tamanio);
+
+            //creamos una estructura temporal para el tiempo realizado
+            struct tm *tm;
+            char fecha[100];
+            tm = localtime(&mbr.MBR_fecha_creacion);
+            strftime(fecha,100,"%d/%m/%y %H:%S",tm);
+            fprintf(graphDot,"<tr>  <td><b>mbr_fecha_creacion</b></td> <td>%s</td>  </tr>\n",fecha);
+            fprintf(graphDot,"<tr>  <td><b>mbr_disk_signature</b></td> <td>%d</td>  </tr>\n",mbr.MBR_disk_signature);
+            fprintf(graphDot,"<tr>  <td><b>Disk_fit</b></td> <td>%c</td>  </tr>\n",mbr.disk_fit);
+
+            int index_Extendida = -1; //si no hay extendida
+            for (int i = 0; i < 4; i++)
+            {
+                //si existe particion
+                if(mbr.MBR_partition[i].part_start!=-1 && mbr.MBR_partition[i].part_status!='1')
+                {
+                    //si existe particion tipo Extendida
+                    if(mbr.MBR_partition[i].part_type == 'E')
+                    {
+                        index_Extendida = i;
+                    }
+                    char status[3];
+
+                    //si es accedido
+                    if(mbr.MBR_partition[i].part_status == '0')
+                        strcpy(status,"0");
+                    else if(mbr.MBR_partition[i].part_status == '2')
+                        strcpy(status,"2");
+                    //llenamos atributos del MBR
+                    fprintf(graphDot,"<tr>  <td><b>part_status_%d</b></td> <td>%s</td>  </tr>\n",(i+1),status);
+                    fprintf(graphDot,"<tr>  <td><b>part_type_%d</b></td> <td>%c</td>  </tr>\n",(i+1),mbr.MBR_partition[i].part_type);
+                    fprintf(graphDot,"<tr>  <td><b>part_fit_%d</b></td> <td>%c</td>  </tr>\n",(i+1),mbr.MBR_partition[i].part_fit);
+                    fprintf(graphDot,"<tr>  <td><b>part_start_%d</b></td> <td>%d</td>  </tr>\n",(i+1),mbr.MBR_partition[i].part_start);
+                    fprintf(graphDot,"<tr>  <td><b>part_size_%d</b></td> <td>%d</td>  </tr>\n",(i+1),mbr.MBR_partition[i].part_size);
+                    fprintf(graphDot,"<tr>  <td><b>part_name_%d</b></td> <td>%s</td>  </tr>\n",(i+1),mbr.MBR_partition[i].part_name);
+                }
+            }
+
+            //finalizacion del grafo si hay extendida
+            fprintf(graphDot,"</table>\n");
+            fprintf(graphDot, ">];\n}\n");
+
+            //si hay extendida
+            if(index_Extendida != -1)
+            {
+                int posicion_eber = 1;
+                EBR ebr;
+
+                fseek(fp,mbr.MBR_partition[index_Extendida].part_start,SEEK_SET);
+
+                //se ejecutara hasta que el archivo se termine de leer
+                while(fread(&ebr,sizeof(EBR),1,fp)!=0 && (ftell(fp) < mbr.MBR_partition[index_Extendida].part_start + mbr.MBR_partition[index_Extendida].part_size)) 
+                {
+                    //llenamos la extendida
+                    if(ebr.EBR_part_status != '1')
+                    {
+                        fprintf(graphDot,"subgraph cluster_%d{\n label=\"EBR_%d\"\n", posicion_eber, posicion_eber);
+                        fprintf(graphDot,"\ntbl_%d[shape=box, label=<\n ",posicion_eber);
+                        fprintf(graphDot, "<table border=\'0\' cellborder=\'1\' cellspacing=\'0\'  width=\'300\' height=\'160\' >\n ");
+                        fprintf(graphDot, "<tr>  <td width=\'150\'><b>Nombre</b></td> <td width=\'150\'><b>Valor</b></td>  </tr>\n");
+                        
+                        char status[3];
+                        //verificacamos si esta disponible
+                        if(ebr.EBR_part_status == '0')
+                            strcpy(status,"0");
+                        else if(ebr.EBR_part_status == '2')
+                            strcpy(status,"2");
+                        fprintf(graphDot, "<tr>  <td><b>part_status_1</b></td> <td>%s</td>  </tr>\n",status);
+                        fprintf(graphDot, "<tr>  <td><b>part_fit_1</b></td> <td>%c</td>  </tr>\n",ebr.EBR_part_fit);
+                        fprintf(graphDot, "<tr>  <td><b>part_start_1</b></td> <td>%d</td>  </tr>\n",ebr.EBR_part_start);
+                        fprintf(graphDot, "<tr>  <td><b>part_size_1</b></td> <td>%d</td>  </tr>\n",ebr.EBR_part_size);
+                        fprintf(graphDot, "<tr>  <td><b>part_next_1</b></td> <td>%d</td>  </tr>\n",ebr.EBR_part_next);
+                        fprintf(graphDot, "<tr>  <td><b>part_name_1</b></td> <td>%s</td>  </tr>\n",ebr.EBR_part_name);
+                        fprintf(graphDot, "</table>\n");
+                        fprintf(graphDot, ">];\n}\n");
+                        posicion_eber++;
+                    }
+
+                    if(ebr.EBR_part_next == -1)
+                        break;
+                    else
+                        fseek(fp, ebr.EBR_part_next, SEEK_SET);
+                }
+            }
+
+            fprintf(graphDot,"}\n");
+            fclose(graphDot);
+            fclose(fp);
+            string comando = "dot -T"+ extension+" grafica.dot -o "+ destino;
+            system(comando.c_str());
+            cout << "Reporte generado con exito " << endl;
+            cout << "\033[31m\n--- Reporte MBR generado con exito ---.\n\033[0m" << endl;
+        }else
+        {
+            cout << "\033[94m\n ... Error, no existe el disco ...\n\033[0m" << endl;
+        }
+    }else
+    {
+        cout << "\033[94m\n ... Error, no se monto la particion ...\n\033[0m" << endl;
+    }
+}
+
+void REPORTE_INODO(string auxPath, string destino, string extension, int bm_inode_start,int inode_start,int bm_block_start){
+
+    FILE *fp = fopen(auxPath.c_str(), "r");
+
+    INODOTABLA inodo;
+    int aux = bm_inode_start;
+    int num = 0;
+    char buff;
+
+    //Archivo para esacribir el dot
+    FILE *graph = fopen("grafica.dot","w");
+    fprintf(graph,"digraph G{\n\n");
+
+    //mientras el bitmap bitmap de nodos es menor al bitmap de bloque entonces ejecuta
+    while(aux < bm_block_start)
+    {   
+        //apuntamos al inicio del bitmap del inoco del primero mientras aumenta 
+        fseek(fp, bm_inode_start + num, SEEK_SET);
+        //obtenemos el byte del archivo
+        buff = static_cast<char>(fgetc(fp));
+        aux++;
+
+        //si se puede escribir en el espacio entonces ejecutamos
+        if(buff == '1')
+        {
+            //apuntamos al inicio del bitmap de inodos
+            fseek(fp,inode_start + static_cast<int>(sizeof(INODOTABLA))*num,SEEK_SET);
+            fread(&inodo,sizeof(INODOTABLA),1,fp);
+            fprintf(graph, "    nodo_%d [ shape=none fontname=\"Century Gothic\" label=<\n",num);
+            fprintf(graph, "   <table border=\'0\' cellborder=\'1\' cellspacing=\'0\' bgcolor=\"royalblue\">");
+            fprintf(graph, "    <tr> <td colspan=\'2\'> <b>Inodo %d</b> </td></tr>\n",num);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_uid </td> <td bgcolor=\"white\"> %d </td>  </tr>\n",inodo.i_uid);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_gid </td> <td bgcolor=\"white\"> %d </td>  </tr>\n",inodo.i_gid);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_size </td> <td bgcolor=\"white\"> %d </td> </tr>\n",inodo.i_size);
+            
+            //creacion para fecha temporal
+            struct tm *tm;
+            char fecha[100];
+            tm=localtime(&inodo.i_atime);
+            strftime(fecha,100,"%d/%m/%y %H:%S",tm);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_atime </td> <td bgcolor=\"white\"> %s </td>  </tr>\n",fecha);
+            
+            tm=localtime(&inodo.i_ctime);
+            strftime(fecha,100,"%d/%m/%y %H:%S",tm);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_ctime </td> <td bgcolor=\"white\"> %s </td>  </tr>\n",fecha);
+            
+            tm=localtime(&inodo.i_mtime);
+            strftime(fecha,100,"%d/%m/%y %H:%S",tm);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_mtime </td> <td bgcolor=\"white\"> %s </td></tr>\n",fecha);
+           
+           //recorremos los 15 inodos del bloque
+            for(int b = 0; b < 15; b++)
+                fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_block_%d </td> <td bgcolor=\"white\"> %d </td> </tr>\n",b,inodo.i_block[b]);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_type </td> <td bgcolor=\"white\"> %c </td> </tr>\n",inodo.i_type);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_perm </td> <td bgcolor=\"white\"> %d </td> </tr>\n",inodo.i_perm);
+            fprintf(graph, "   </table>>]\n");
+        }
+        num++;
+    }
+    fprintf(graph,"\n}");
+    fclose(graph);
+
+    fclose(fp);
+
+    //ejecutamos en la consola
+    string comando = "dot -T"+extension+" grafica.dot -o "+destino;
+    system(comando.c_str());
+    cout << "\033[31m\n--- Reporte INODO generado con exito ---.\n\033[0m" << endl;
+    
+}
+
+void REPORTE_JOURNALING(string auxPath, string destino, string extension,int inicio_super){
+    //abrimos el disco
+    FILE *fp = fopen(auxPath.c_str(),"r");
+
+    SUPERBLOQUE super;
+    JOURNAL journal;
+
+    //apuntamos al inicio del super bloque
+    fseek(fp, inicio_super, SEEK_SET);
+    fread(&super, sizeof(SUPERBLOQUE), 1, fp);
+
+    //abrimos para escribir el .dot
+    FILE *graph = fopen("grafica.dot","w");
+    fprintf(graph,"digraph G{\n");
+    fprintf(graph, "    nodo [shape=none, fontname=\"Century Gothic\" label=<\n");
+    fprintf(graph, "   <table border=\'0\' cellborder='1\' cellspacing=\'0\'>\n");
+    fprintf(graph, "    <tr> <td COLSPAN=\'7\' bgcolor=\"cornflowerblue\"> <b>JOURNALING</b> </td></tr>\n");
+    fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"><b>Operacion</b></td> <td bgcolor=\"lightsteelblue\"><b>Tipo</b></td><td bgcolor=\"lightsteelblue\"><b>Nombre</b></td><td bgcolor=\"lightsteelblue\"><b>Contenido</b></td>\n");
+    fprintf(graph, "    <td bgcolor=\"lightsteelblue\"><b>Propietario</b></td><td bgcolor=\"lightsteelblue\"><b>Permisos</b></td><td bgcolor=\"lightsteelblue\"><b>Fecha</b></td></tr>\n");
+    
+    //aapuntamos al incio del bitmap del super bloque
+    fseek(fp,inicio_super + static_cast<int>(sizeof(SUPERBLOQUE)),SEEK_SET);
+
+    //mientras el puntero no avance la posicion del bitmap de nodos 
+    while(ftell(fp) < super.s_bm_inode_start)
+    {
+        //leemos el journal para llenar el reporte
+        fread(&journal, sizeof(JOURNAL), 1, fp);
+        if(journal.Journal_tipo == 0 || journal.Journal_tipo == 1)
+        {
+            //que este disponible o ocupado
+            struct tm *tm;
+            char fecha[100];
+            tm = localtime(&journal.Journal_fecha);
+            strftime(fecha,100,"%d/%m/%y %H:%S",tm);
+            fprintf(graph,"<tr><td>%s</td><td>%d</td><td>%s</td><td>%s</td><td>%d</td><td>%d</td><td>%s</td></tr>\n",journal.Journal_Tipo_Operacion,journal.Journal_tipo,journal.Journal_nombre,journal.Journal_contenido,journal.Journal_propietario,journal.Journal_permisos,fecha);
+        }
+    }
+    fprintf(graph, "   </table>>]\n");
+    fprintf(graph,"}");
+    fclose(graph);
+
+    fclose(fp);
+    
+    //ejecutamos comando en el terminal
+    string comando = "dot -T"+extension+" grafica.dot -o "+destino;
+    system(comando.c_str());
+    cout << "\033[31m\n---- Reporte JOURNALING generado con exito ----.\n\033[0m" << endl;
+}
+
+void REPORTE_BLOQUES(string auxPath, string destino, string extension, int bm_block_start, int block_start, int inode_start){
+    //abrimos el disco
+    FILE *fp = fopen(auxPath.c_str(),"r");
+
+    BLOQUECARPETAS carpeta;
+    BLOQUEARCHIVOS archivo;
+    BLOQUEAPUNTADORES apuntador;
+
+    //inicio del bitmap de bloques
+    int aux = bm_block_start;
+    int i = 0;
+    char buff;
+
+    //abrimos el .dot para llenar la grafica
+    FILE *graph = fopen("grafica.dot","w");
+    fprintf(graph,"digraph G{\n\n");
+
+    //mientras el bitmap de bloques no superela cantidad de inicio de bitmap de inodos
+    while(aux < inode_start)
+    {
+        //apuntamos al bloque bitmap inicio y cada vez se va ir avanzndo un bloque mas
+        fseek(fp,bm_block_start + i,SEEK_SET);
+
+        //obtenemos el estado del archivo
+        buff = static_cast<char>(fgetc(fp));
+        aux++;
+
+        //si el buff es uno uno completamos la tabla con los datos que serian las particiones
+        if(buff == '1')
+        {   //apuntamos al bitmap de inicio en el espacio de la carepta
+            fseek(fp,block_start + static_cast<int>(sizeof(BLOQUECARPETAS))*i,SEEK_SET);
+            fread(&carpeta,sizeof(BLOQUECARPETAS),1,fp);
+            fprintf(graph, "    nodo_%d [ shape=none, fontname=\"Century Gothic\" label=< \n",i);
+            fprintf(graph, "   <table border=\'0\' cellborder='1' cellspacing='0' bgcolor=\"seagreen\">");
+            fprintf(graph, "    <tr> <td colspan=\'2\'> <b>Bloque Carpeta %d</b> </td></tr>\n",i);
+            fprintf(graph, "    <tr> <td bgcolor=\"mediumseagreen\"> b_name </td> <td bgcolor=\"mediumseagreen\"> b_inode </td></tr>\n");
+            
+            //recorremos las 4 particiones
+            for(int c = 0;c < 4;c++)
+                fprintf(graph, "    <tr> <td bgcolor=\"white\"> %s </td> <td bgcolor=\"white\"> %d </td></tr>\n",carpeta.b_content[c].b_name,carpeta.b_content[c].b_inodo);
+            fprintf(graph, "   </table>>]\n\n");
+
+        }else if(buff == '2')
+        {   
+            //apuntamos al incio del bitmp, hasta el archivo creado
+            fseek(fp,block_start + static_cast<int>(sizeof(BLOQUEARCHIVOS))*i,SEEK_SET);
+            fread(&archivo,sizeof(BLOQUEARCHIVOS),1,fp);
+            fprintf(graph, "    nodo_%d [ shape=none, label=< \n",i);
+            fprintf(graph, "   <table border=\'0\' cellborder='1' cellspacing='0' bgcolor=\"sandybrown\">");
+            fprintf(graph, "    <tr> <td colspan=\'2\'> <b>Bloque Archivo %d </b></td></tr>\n",i);
+            fprintf(graph, "    <tr> <td colspan=\'2\' bgcolor=\"white\"> %s </td></tr>\n",archivo.b_content);
+            fprintf(graph, "   </table>>]\n\n");
+        }else if(buff == '3')
+        {
+            //apuntamos a los 16 bloques y leeemos
+            fseek(fp, block_start + static_cast<int>(sizeof(BLOQUEAPUNTADORES))*i,SEEK_SET);
+            fread(&apuntador,sizeof(BLOQUEAPUNTADORES),1,fp);
+
+
+            fseek(fp, block_start + static_cast<int>(sizeof(BLOQUEAPUNTADORES))*i, SEEK_SET);
+            fread(&apuntador,sizeof(BLOQUEAPUNTADORES), 1, fp);
+
+            //llrnsmod los datos segun lo apuntado
+            fprintf(graph, "    bloque_%d [shape=plaintext fontname=\"Century Gothic\" label=< \n",i);
+            fprintf(graph, "   <table border=\'0\' bgcolor=\"khaki\">\n");
+            fprintf(graph, "    <tr> <td> <b>Pointer block %d</b></td></tr>\n",i);
+            
+            //recorremos los 16 bloques
+            for(int j = 0; j < 16; j++)
+                fprintf(graph, "    <tr> <td bgcolor=\"white\">%d</td> </tr>\n",apuntador.b_pointers[j]);
+            fprintf(graph, "   </table>>]\n\n");
+        }
+        i++;
+    }
+
+    fprintf(graph,"\n}");
+    fclose(graph);
+
+    fclose(fp);
+
+    //ejecutamos la grafica en la terminal
+    string comando = "dot -T"+extension+ " grafica.dot -o "+destino;
+    system(comando.c_str());
+    cout << "\033[94m\n---- Reporte de BLOQUES generado con exito ----.\n\033[0m" << endl;
+}
+
+void REPORTE_BM_INODE(string direccion, string destino, int start_bm, int num_inodo){
+    //abrimos el disco a reportar
+    FILE *fp = fopen(direccion.c_str(),"rb+");
+
+    char byte;
+    //abrimos el archivo de destino, tiene que ser un txt
+    FILE *report = fopen(destino.c_str(),"w+");
+    fseek(report,0,SEEK_SET);
+    int cont = 0;
+
+    for (int i = 0; i < num_inodo; i++) 
+    {
+        //apuntamos al inicio del bitmap de inicio
+        fseek(fp, start_bm + i,SEEK_SET);
+        //obtenemos el byte
+        byte = static_cast<char>(fgetc(fp));
+
+        //si no esta ocupado obtenemos el 0 en el reporte
+        if(byte == '0')
+            fprintf(report,"0 ");
+        else
+        //si esta ocupado ese espacio se llena con 1
+            fprintf(report,"1 ");
+        //si el contador encuentra 20 en la cantidad de inodos
+        if(cont == 19){
+            //reiniciamos a 0 el contador
+            cont = 0;
+            fprintf(report, "\n");
+        }else
+            cont++;
+    }
+    fclose(report);
+
+    fclose(fp);
+    cout << "\033[31m\n---- Reporte BM generado con exito ----\n.\033[0m" << endl;
+}
+
 void comando_MKDIR(string auxPath, bool auxP){
     
     //almacenamiento variables
@@ -4048,9 +4641,9 @@ void logOUT(){
         actualSesion.direccion = "";
         actualSesion.inicioSuper = -1;
 
-        cout << "\033[94m\n--- Sesion finalizada ---.\033[0m" << endl;
+        cout << "\033[31m\n--- Sesion finalizada ---.\033[0m" << endl;
     }else
-        cout << "\033[31mERROR, no hay sesion acutalmente.\033[0m" << endl;
+        cout << "\033[94mERROR, no hay sesion acutalmente.\033[0m" << endl;
 }
 
 // -- Ejecucion comando MKFS --
@@ -5036,6 +5629,302 @@ void MKDIR(vector<string> datos){
     }
 }
 
+// -- REP -- 
+void REPORTES(vector<string> datos){
+    string auxPath = "";
+    string auxName = "";
+    string auxId = "";
+    string auxRuta = "";
+    bool auxP = false;
+
+    for (int i = 1; i < datos.size(); i++)
+    {
+        vector<string> tipoP;
+        tipoP = splitParam(datos.at(i));
+        if (tipoP.at(0) == "SIN SIMBOLO" || tipoP.at(0) == "SIN PUNTOS")
+        {
+            auxP = true;
+        }else{
+            string coman = minusculas(tipoP.at(0));
+            string datoComan = tipoP.at(2);
+
+            if (coman == "-path")
+            {
+                string ident = "\"";
+                if(strstr(datoComan.c_str(), ident.c_str())){
+                    string uno = SplitCExec(datoComan);
+                    auxPath = path + uno; 
+                    crearVerificar_rutas(uno);
+                }else{
+                    auxPath = path + datoComan;
+                    crearVerificar_rutas(datoComan);
+                }
+            }else if (coman == "-name")
+            {
+                auxName = minusculas(datoComan);
+            }else if (coman == "-id")
+            {
+                auxId = datoComan;
+            }else if (coman == "-ruta")
+            {
+                auxRuta = datoComan;
+            }else{
+                cout << "\033[94mERROR, no es comando valido\033[0m" << endl;
+                break;
+            }
+        }
+    }
+
+    if (auxPath != "" && auxId != "" && auxName != "")
+    {
+        if (auxName == "mbr")
+        {
+            REPORTE_MBR(auxPath, auxId);
+        }else if (auxName == "disk")
+        {
+            REPORTE_DISK(auxPath, auxId);
+        }else if (auxName == "inode")
+        {   
+            string extension = ObtenerExtension(auxPath);
+            string direccion = "";
+            string nombre = "";
+            //bandera del ID
+            bool flagId = false;
+
+            for (int i = 0; i < Arreglomount.size(); i++)
+            {
+                if (auxId == Arreglomount[i].id)
+                {
+                    direccion = Arreglomount[i].direccion;
+                    nombre = Arreglomount[i].nombre;
+                    flagId = true;
+                    break;
+                }
+            }
+
+            if (flagId)
+            {
+                int index = buscarParticionP_E(direccion, nombre);
+                if(index != -1)
+                {//Primaria|Extendida
+                    MBR masterboot;
+                    SUPERBLOQUE super;
+                    FILE *fp = fopen(direccion.c_str(),"rb+");
+
+                    fread(&masterboot,sizeof(MBR),1,fp);
+                    fseek(fp,masterboot.MBR_partition[index].part_start,SEEK_SET);
+                    fread(&super,sizeof(SUPERBLOQUE),1,fp);
+                    fclose(fp);
+
+                    REPORTE_INODO(direccion, auxPath, extension, super.s_bm_inode_start,super.s_inode_start,super.s_bm_block_start);
+                }else{//Logica
+                    int index = buscarParticion_Logica(direccion, nombre);
+                    if(index != -1)
+                    {
+                        EBR extendedBoot;
+                        SUPERBLOQUE super;
+                        FILE *fp = fopen(direccion.c_str(),"rb+");
+
+                        fseek(fp,index,SEEK_SET);
+                        fread(&extendedBoot,sizeof(EBR),1,fp);
+                        fread(&super,sizeof(SUPERBLOQUE),1,fp);
+                        fclose(fp);
+
+                        REPORTE_INODO(direccion, auxPath, extension, super.s_bm_inode_start,super.s_inode_start,super.s_bm_block_start);
+                    }
+                }
+            }else{
+                cout << "\033[94mError, no se monto la particion\033[0m" << endl;
+            }
+            
+        }else if (auxName == "journaling")
+        {
+            string extension = ObtenerExtension(auxPath);
+            string direccion = "";
+            string nombre = "";
+            //bandera del ID
+            bool flagId = false;
+
+            for (int i = 0; i < Arreglomount.size(); i++)
+            {
+                if (auxId == Arreglomount[i].id)
+                {
+                    direccion = Arreglomount[i].direccion;
+                    nombre = Arreglomount[i].nombre;
+                    flagId = true;
+                    break;
+                }
+            }
+            if (flagId)
+            {
+                int index = buscarParticionP_E(direccion, nombre);
+                if(index != -1){//Primaria|Extendida
+                    MBR masterboot;
+                    SUPERBLOQUE super;
+                    FILE *fp = fopen(direccion.c_str(),"rb+");
+                    fread(&masterboot,sizeof(MBR),1,fp);
+                    fseek(fp,masterboot.MBR_partition[index].part_start,SEEK_SET);
+                    fread(&super,sizeof(SUPERBLOQUE),1,fp);
+                    fclose(fp);
+                    REPORTE_JOURNALING(direccion, auxPath, extension, masterboot.MBR_partition[index].part_start);
+                }
+            }else{
+                cout << "\033[94mError, no se monto la particion, no se encuentra id\033[0m" << endl;
+            }
+        }else if (auxName == "block")
+        {
+            string extension = ObtenerExtension(auxPath);
+            string direccion = "";
+            string nombre = "";
+            //bandera del ID
+            bool flagId = false;
+
+            for (int i = 0; i < Arreglomount.size(); i++)
+            {
+                if (auxId == Arreglomount[i].id)
+                {
+                    direccion = Arreglomount[i].direccion;
+                    nombre = Arreglomount[i].nombre;
+                    flagId = true;
+                    break;
+                }
+            }
+
+            if (flagId)
+            {
+                int index = buscarParticionP_E(direccion, nombre);
+                if(index != -1)
+                {//Primaria|Extendida
+                    MBR masterboot;
+                    SUPERBLOQUE super;
+                    FILE *fp = fopen(direccion.c_str(),"rb+");
+                    fread(&masterboot,sizeof(MBR),1,fp);
+                    fseek(fp,masterboot.MBR_partition[index].part_start,SEEK_SET);
+                    fread(&super,sizeof(SUPERBLOQUE),1,fp);
+                    fclose(fp);
+                    REPORTE_BLOQUES(direccion, auxPath, extension,super.s_bm_block_start,super.s_block_start,super.s_inode_start);
+                }else{//Logica
+                    int index = buscarParticion_Logica(direccion, nombre);
+                    if(index != -1)
+                    {
+                        EBR extendedBoot;
+                        SUPERBLOQUE super;
+                        FILE *fp = fopen(direccion.c_str(),"rb+");
+                        fseek(fp,index,SEEK_SET);
+                        fread(&extendedBoot,sizeof(EBR),1,fp);
+                        fread(&super,sizeof(SUPERBLOQUE),1,fp);
+                        fclose(fp);
+                        REPORTE_BLOQUES(direccion, auxPath, extension,super.s_bm_block_start,super.s_block_start,super.s_inode_start);
+                    }
+                }
+            }else{
+                cout << "\033[94mError, no se monto la particion\033[0m" << endl;
+            }
+            
+        }else if (auxName == "bm_inode") //solo recibe .txt
+        {
+            string extension = ObtenerExtension(auxPath);
+            string direccion = "";
+            string nombre = "";
+            //bandera del ID
+            bool flagId = false;
+
+            for (int i = 0; i < Arreglomount.size(); i++)
+            {
+                if (auxId == Arreglomount[i].id)
+                {
+                    direccion = Arreglomount[i].direccion;
+                    nombre = Arreglomount[i].nombre;
+                    flagId = true;
+                    break;
+                }
+            }
+
+            if (flagId)
+            {
+                int index = buscarParticionP_E(direccion, nombre);
+                if(index != -1)
+                {//Primaria|Extendida
+                    MBR mbr;
+                    SUPERBLOQUE super;
+                    FILE *fp = fopen(direccion.c_str(),"rb+");
+                    fread(&mbr, sizeof(MBR), 1, fp);
+                    fseek(fp, mbr.MBR_partition[index].part_start,SEEK_SET);
+                    fread(&super,sizeof(SUPERBLOQUE),1,fp);
+                    fclose(fp);
+                    REPORTE_BM_INODE(direccion, auxPath, super.s_bm_inode_start,super.s_inodes_count);
+                }else{//Logica
+                    int index = buscarParticion_Logica(direccion, nombre);
+                    if(index != -1){
+                        EBR extendedBoot;
+                        SUPERBLOQUE super;
+                        FILE *fp = fopen(direccion.c_str(),"rb+");
+                        fseek(fp,index,SEEK_SET);
+                        fread(&extendedBoot,sizeof(EBR),1,fp);
+                        fread(&super,sizeof(SUPERBLOQUE),1,fp);
+                        fclose(fp);
+                        REPORTE_BM_INODE(direccion, auxPath,super.s_bm_inode_start,super.s_inodes_count);
+                    }
+                }
+            }else{
+                cout << "\033[94mError, no se monto la particion\033[0m" << endl;
+            }
+            
+        }else if (auxName == "bm_block")
+        {
+            string extension = ObtenerExtension(auxPath);
+            string direccion = "";
+            string nombre = "";
+            //bandera del ID
+            bool flagId = false;
+
+            for (int i = 0; i < Arreglomount.size(); i++)
+            {
+                if (auxId == Arreglomount[i].id)
+                {
+                    direccion = Arreglomount[i].direccion;
+                    nombre = Arreglomount[i].nombre;
+                    flagId = true;
+                    break;
+                }
+            }
+
+            if (flagId)
+            {
+                int index = buscarParticionP_E(direccion, nombre);
+                if(index != -1){//Primaria|Extendida
+                    MBR mbr;
+                    SUPERBLOQUE super;
+                    FILE *fp = fopen(direccion.c_str(),"rb+");
+                    fread(&mbr, sizeof(MBR), 1, fp);
+                    fseek(fp, mbr.MBR_partition[index].part_start, SEEK_SET);
+                    fread(&super,sizeof(SUPERBLOQUE),1,fp);
+                    fclose(fp);
+                    REPORTE_BM_INODE(direccion, auxPath, super.s_bm_block_start,super.s_blocks_count);
+                }else{//Logica
+                    int index = buscarParticion_Logica(direccion, nombre);
+                    if(index != -1){
+                        EBR ebr;
+                        SUPERBLOQUE super;
+                        FILE *fp = fopen(direccion.c_str(),"rb+");
+                        fseek(fp,index,SEEK_SET);
+                        fread(&ebr, sizeof(EBR), 1, fp);
+                        fread(&super,sizeof(SUPERBLOQUE),1,fp);
+                        fclose(fp);
+                        REPORTE_BM_INODE(direccion, auxPath, super.s_bm_block_start,super.s_blocks_count);
+                    }
+                }
+            }else
+            {
+                cout << "\033[94mError, no se monto la particion\033[0m" << endl;
+            }
+        }
+    }else
+    {
+        cout << "\033[94mERROR, no se recibio algun parametro obligatorio.\033[0m" << endl;
+    }
+}
+
 //-- comandos --
 void mandaraComando(string comando, vector<string> datos){
     if (comando == "mkdisk")
@@ -5169,12 +6058,14 @@ void mandaraComando(string comando, vector<string> datos){
     }else if (comando == "mkdir")
     {
         MKDIR(datos);
+    }else if (comando == "rep")
+    {
+        REPORTES(datos);
+    }else if (comando == "pause")
+    {
+        cout << "pause" << endl;
     }
     
-    
-    
-    
-     
 }
 
 int main(){
