@@ -1158,9 +1158,9 @@ void comando_unmount(string id){
     }
 }
 
-void fdisk_desmontar(string id){
+void fdisk_desmontar(string id, int tamanioMount){
 
-    for (int i = 0; i < Arreglomount.size(); i++)
+    for (int i = 0; i < tamanioMount; i++)
     {
         if( id == Arreglomount[i].id){
             Arreglomount.erase((Arreglomount.begin()+ i));
@@ -4888,8 +4888,7 @@ void comando_MKFILE(string ruta, int size, bool P, string cont){
     }else{
         valPath = ruta;
     }
-    
-    cout << "el falg " << valPath << endl;
+
     string valCont = cont;
     int valSize = size;
 
@@ -5522,31 +5521,42 @@ void RMDISK(vector<string> datos){
                     uno = path + uno;
                     num = BorrarDisco(uno);
 
+                    int tamanioMount = Arreglomount.size();
+                    vector<NDMOUNT> temp = Arreglomount;
+
+                    if (num == 0)
+                    {
+                        for (int i = 0; i < tamanioMount; i++)
+                        {
+                            if (uno == temp[i].direccion)
+                            {
+                                fdisk_desmontar(temp[i].id, tamanioMount);
+                            }
+                        }
+                    }
+
                 }else{
                     uno = path + datoComan;
                     num = BorrarDisco(uno);
-                }
+                    int tamanioMount = Arreglomount.size();
 
-                int tamanioMount = Arreglomount.size();
+                    vector<NDMOUNT> temp = Arreglomount;
 
-                if (num == 0)
-                {
-                    for (int i = 0; i < tamanioMount; i++)
+                    if (num == 0)
                     {
-                        if (uno == Arreglomount[i].direccion)
+                        for (int i = 0; i < tamanioMount; i++)
                         {
-                            fdisk_desmontar(Arreglomount[i].id);
+                            if (uno == temp[i].direccion)
+                            {
+                                fdisk_desmontar(temp[i].id, tamanioMount);
+                            }
                         }
-                        
                     }
-                    
                 }
-                
             }
             
         }
     }
-    
 }
 
 //-- FDISK --
@@ -6912,9 +6922,17 @@ void mandaraComando(string comando, vector<string> datos){
 
 int main(){
 
+    cout <<  "$$---------------------------------------------------------------$$" << endl;
+    cout <<  "##                  Julio José Orellana Ruíz                     ##" << endl;
+    cout <<  "##                         201908120                             ##" << endl;
+    cout <<  "##                                                               ##" << endl;
+    cout <<  "##                    Proyecto 1 --- MIA                         ##" << endl;
+    cout <<  "##             curso vacas -- 2do. Semestre -- 2021              ##" << endl;
+    cout <<  "$$---------------------------------------------------------------$$\n" << endl;
+
     while (true)
     {
-        cout <<  "Ingrese comando: " << ends;
+        cout <<  " >> Ingrese comando: " << ends;
         string ruta;
         getline(cin, ruta);
 
