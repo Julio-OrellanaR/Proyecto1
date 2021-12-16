@@ -22,7 +22,6 @@
 using namespace std;
 
 // --  GLOBALES--
-//TODO: agregar el resto de comandos
 vector<string> TodosComandos = {"mkdisk", "rmdisk", "fdisk", "exec", "pause", "mount", "unmount", "mkfs",
 "login", "logout", "mkgrp", "rmgrp", "mkusr", "rmusr", "chmod", "mkfile", "mkdir", "rep", "pause"};
 bool flag_login = false;
@@ -855,7 +854,7 @@ void createPartitionLogica(int size, char unit, string pathPart, char fit, strin
                         fseek(fp, ftell(fp) - sizeof (EBR),SEEK_SET);
                         fwrite(&ebr, sizeof(EBR),1 ,fp);
                         //Escribimos el nuevo EBR
-                        //TODO: cambiar a ebr.part next para simplificar
+                        
                         fseek(fp, ebr.EBR_part_start + ebr.EBR_part_size, SEEK_SET);
 
                         ebr.EBR_part_status = 0;
