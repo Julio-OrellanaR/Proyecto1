@@ -183,6 +183,13 @@ struct JOURNAL
     int Journal_permisos;
 };
 
+struct USUARIO{
+    int id_usr;
+    int id_grp;
+    char username[12];
+    char password[12];
+    char group[12];
+};
 
 //-- DISCO --
 string path="/home/julio-or";
@@ -1151,6 +1158,17 @@ void comando_unmount(string id){
     }
 }
 
+void fdisk_desmontar(string id){
+
+    for (int i = 0; i < Arreglomount.size(); i++)
+    {
+        if( id == Arreglomount[i].id){
+            Arreglomount.erase((Arreglomount.begin()+ i));
+            break;
+        }
+    }
+}
+
 bool busca_IDmount(string id){
     for (int i = 0; i < Arreglomount.size(); i++)
     {
@@ -1551,6 +1569,68 @@ int buscarGrupo(string name){
     }
 
     return -1;
+}
+
+USUARIO obtener_usuario(string direccion,int inicioSuper, int usuario){
+    FILE *fp = fopen(direccion.c_str(),"rb+");
+
+    char cadena[400] = "\0";
+    SUPERBLOQUE super;
+    INODOTABLA inodo;
+    USUARIO usr;
+
+    fseek(fp,inicioSuper,SEEK_SET);
+    fread(&super,sizeof(SUPERBLOQUE),1,fp);
+    //Nos posicionamos en el inodo del archivo users.txt
+    fseek(fp,super.s_inode_start + static_cast<int>(sizeof(INODOTABLA)), SEEK_SET);
+    fread(&inodo,sizeof(INODOTABLA),1,fp);
+
+    for(int i = 0; i < 15; i++){
+        if(inodo.i_block[i] != -1){
+            BLOQUEARCHIVOS archivo;
+            fseek(fp,super.s_block_start,SEEK_SET);
+            for(int j = 0; j <= inodo.i_block[i]; j++){
+                fread(&archivo,sizeof(BLOQUEARCHIVOS),1,fp);
+            }
+            strcat(cadena,archivo.b_content);
+        }
+    }
+
+    fclose(fp);
+
+    char *end_str;
+    char *token = strtok_r(cadena,"\n",&end_str);
+    while(token != nullptr){
+        char id[2];
+        char tipo[2];
+        char user[12];
+        char grupo[12];
+        char *end_token;
+        char *token2 = strtok_r(token,",",&end_token);
+        strcpy(id,token2);
+        if(strcmp(id,"0") != 0){//Verificar que no sea un U/G eliminado
+            token2 = strtok_r(nullptr,",",&end_token);
+            strcpy(tipo,token2);
+            if(strcmp(tipo,"U") == 0){
+                token2 = strtok_r(nullptr,",",&end_token);
+                strcpy(grupo,token2);
+                token2 = strtok_r(nullptr,",",&end_token);
+                strcpy(user,token2);
+                int idAux = atoi(id);
+                if(idAux == usuario){
+                    string groupName(grupo);
+                    usr.id_usr = atoi(id);
+                    usr.id_grp = buscarGrupo(groupName);
+                    strcpy(usr.username,user);
+                    strcpy(usr.group,grupo);
+                    return usr;
+                }
+
+            }
+        }
+        token = strtok_r(nullptr,"\n",&end_str);
+    }
+    return usr;
 }
 
 // -- Verificaro los datos para login
@@ -2285,7 +2365,7 @@ void eliminarUsuario(string name){
                             archivo.b_content[posicion] = '0';
                             fseek(fp,super.s_block_start+static_cast<int>(sizeof(BLOQUEARCHIVOS))*numBloque,SEEK_SET);
                             fwrite(&archivo,sizeof(BLOQUEARCHIVOS),1,fp);
-                            cout << "Usuario eliminado con exito" << endl;
+                            cout << "USUARIO eliminado con exito" << endl;
                             flag = true;
                             break;
                         }
@@ -4078,32 +4158,32 @@ void REPORTE_INODO(string auxPath, string destino, string extension, int bm_inod
             fseek(fp,inode_start + static_cast<int>(sizeof(INODOTABLA))*num,SEEK_SET);
             fread(&inodo,sizeof(INODOTABLA),1,fp);
             fprintf(graph, "    nodo_%d [ shape=none fontname=\"Century Gothic\" label=<\n",num);
-            fprintf(graph, "   <table border=\'0\' cellborder=\'1\' cellspacing=\'0\' bgcolor=\"royalblue\">");
+            fprintf(graph, "   <table border=\'0\' cellborder=\'1\' cellspacing=\'0\' bgcolor=\"Orange\">");
             fprintf(graph, "    <tr> <td colspan=\'2\'> <b>Inodo %d</b> </td></tr>\n",num);
-            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_uid </td> <td bgcolor=\"white\"> %d </td>  </tr>\n",inodo.i_uid);
-            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_gid </td> <td bgcolor=\"white\"> %d </td>  </tr>\n",inodo.i_gid);
-            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_size </td> <td bgcolor=\"white\"> %d </td> </tr>\n",inodo.i_size);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> i_uid </td> <td bgcolor=\"white\"> %d </td>  </tr>\n",inodo.i_uid);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> i_gid </td> <td bgcolor=\"white\"> %d </td>  </tr>\n",inodo.i_gid);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> i_size </td> <td bgcolor=\"white\"> %d </td> </tr>\n",inodo.i_size);
             
             //creacion para fecha temporal
             struct tm *tm;
             char fecha[100];
             tm=localtime(&inodo.i_atime);
             strftime(fecha,100,"%d/%m/%y %H:%S",tm);
-            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_atime </td> <td bgcolor=\"white\"> %s </td>  </tr>\n",fecha);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> i_atime </td> <td bgcolor=\"white\"> %s </td>  </tr>\n",fecha);
             
             tm=localtime(&inodo.i_ctime);
             strftime(fecha,100,"%d/%m/%y %H:%S",tm);
-            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_ctime </td> <td bgcolor=\"white\"> %s </td>  </tr>\n",fecha);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> i_ctime </td> <td bgcolor=\"white\"> %s </td>  </tr>\n",fecha);
             
             tm=localtime(&inodo.i_mtime);
             strftime(fecha,100,"%d/%m/%y %H:%S",tm);
-            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_mtime </td> <td bgcolor=\"white\"> %s </td></tr>\n",fecha);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> i_mtime </td> <td bgcolor=\"white\"> %s </td></tr>\n",fecha);
            
            //recorremos los 15 inodos del bloque
             for(int b = 0; b < 15; b++)
-                fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_block_%d </td> <td bgcolor=\"white\"> %d </td> </tr>\n",b,inodo.i_block[b]);
-            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_type </td> <td bgcolor=\"white\"> %c </td> </tr>\n",inodo.i_type);
-            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_perm </td> <td bgcolor=\"white\"> %d </td> </tr>\n",inodo.i_perm);
+                fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> i_block_%d </td> <td bgcolor=\"white\"> %d </td> </tr>\n",b,inodo.i_block[b]);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> i_type </td> <td bgcolor=\"white\"> %c </td> </tr>\n",inodo.i_type);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> i_perm </td> <td bgcolor=\"white\"> %d </td> </tr>\n",inodo.i_perm);
             fprintf(graph, "   </table>>]\n");
         }
         num++;
@@ -4136,9 +4216,9 @@ void REPORTE_JOURNALING(string auxPath, string destino, string extension,int ini
     fprintf(graph,"digraph G{\n");
     fprintf(graph, "    nodo [shape=none, fontname=\"Century Gothic\" label=<\n");
     fprintf(graph, "   <table border=\'0\' cellborder='1\' cellspacing=\'0\'>\n");
-    fprintf(graph, "    <tr> <td COLSPAN=\'7\' bgcolor=\"cornflowerblue\"> <b>JOURNALING</b> </td></tr>\n");
-    fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"><b>Operacion</b></td> <td bgcolor=\"lightsteelblue\"><b>Tipo</b></td><td bgcolor=\"lightsteelblue\"><b>Nombre</b></td><td bgcolor=\"lightsteelblue\"><b>Contenido</b></td>\n");
-    fprintf(graph, "    <td bgcolor=\"lightsteelblue\"><b>Propietario</b></td><td bgcolor=\"lightsteelblue\"><b>Permisos</b></td><td bgcolor=\"lightsteelblue\"><b>Fecha</b></td></tr>\n");
+    fprintf(graph, "    <tr> <td COLSPAN=\'7\' bgcolor=\"Orange\"> <b>JOURNALING</b> </td></tr>\n");
+    fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"><b>Operacion</b></td> <td bgcolor=\"lightblue\"><b>Tipo</b></td><td bgcolor=\"lightblue\"><b>Nombre</b></td><td bgcolor=\"lightblue\"><b>Contenido</b></td>\n");
+    fprintf(graph, "    <td bgcolor=\"lightblue\"><b>Propietario</b></td><td bgcolor=\"lightblue\"><b>Permisos</b></td><td bgcolor=\"lightblue\"><b>Fecha</b></td></tr>\n");
     
     //aapuntamos al incio del bitmap del super bloque
     fseek(fp,inicio_super + static_cast<int>(sizeof(SUPERBLOQUE)),SEEK_SET);
@@ -4293,6 +4373,230 @@ void REPORTE_BM_INODE(string direccion, string destino, int start_bm, int num_in
     cout << "\033[31m\n---- Reporte BM generado con exito ----\n.\033[0m" << endl;
 }
 
+void REPORTE_TREE(string auxPath, string ubicacion, string extension, int start_super){
+    //abrimos el disco que se realizara el reporte
+    FILE *fp = fopen(auxPath.c_str(),"r");
+
+    //inicialisamos estructuras
+    SUPERBLOQUE super;
+    INODOTABLA inodo;
+    BLOQUECARPETAS carpeta;
+    BLOQUEARCHIVOS archivo;
+    BLOQUEAPUNTADORES apuntador;
+
+    //apuntamos al inicio del super bloque
+    fseek(fp, start_super, SEEK_SET);
+    fread(&super,sizeof(SUPERBLOQUE),1,fp);
+
+    //incio del bitmap de inodos
+    int aux_S_istart = super.s_bm_inode_start;
+    int i = 0;
+
+    char buff;
+
+    //abrimos el archivo dot que vamos a escribir
+    FILE *graph = fopen("grafica.dot", "w");
+    fprintf(graph, "digraph G{\n\n");
+    fprintf(graph, "    rankdir=\"LR\" \n");
+
+    //Creamos los inodos - mientras el aux del super no supere a los bitmas del bloque
+    while(aux_S_istart < super.s_bm_block_start)
+    {
+        //apuntamos al bitmap de inodos del super bloque
+        fseek(fp,super.s_bm_inode_start + i,SEEK_SET);
+
+        buff = static_cast<char>(fgetc(fp));
+        aux_S_istart++;
+        int port = 0;
+
+        //si lee el valor 1 segut el archivo se extraeron datos
+        if(buff == '1')
+        {
+            //apuntamos al super bloque de inodos segun cada bitmap de la tabla inodos
+            fseek(fp,super.s_inode_start + static_cast<int>(sizeof(INODOTABLA))*i,SEEK_SET);
+            fread(&inodo,sizeof(INODOTABLA),1,fp);
+
+            fprintf(graph, "    inodo_%d [ shape=plaintext fontname=\"Century Gothic\" label=<\n",i);
+            fprintf(graph, "   <table bgcolor=\"royalblue\" border=\'0\' >");
+            fprintf(graph, "    <tr> <td colspan=\'2\'><b>Inode %d</b></td></tr>\n",i);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_uid </td> <td bgcolor=\"white\"> %d </td>  </tr>\n",inodo.i_uid);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_gid </td> <td bgcolor=\"white\"> %d </td>  </tr>\n",inodo.i_gid);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_size </td><td bgcolor=\"white\"> %d </td> </tr>\n",inodo.i_size);
+            
+            //estructura de tiempo temporal
+            struct tm *tm;
+            char fecha[100];
+            tm=localtime(&inodo.i_atime);
+            strftime(fecha,100,"%d/%m/%y %H:%S",tm);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_atime </td> <td bgcolor=\"white\"> %s </td> </tr>\n",fecha);
+            tm=localtime(&inodo.i_ctime);
+            strftime(fecha,100,"%d/%m/%y %H:%S",tm);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_ctime </td> <td bgcolor=\"white\"> %s </td> </tr>\n",fecha);
+            tm=localtime(&inodo.i_mtime);
+            strftime(fecha,100,"%d/%m/%y %H:%S",tm);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_mtime </td> <td bgcolor=\"white\"> %s </td> </tr>\n",fecha);
+            
+            //recorremos los 15 bloques
+            for(int b = 0; b < 15; b++){
+                fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_block_%d </td> <td bgcolor=\"white\" port=\"f%d\"> %d </td></tr>\n",port,b,inodo.i_block[b]);
+                port++;
+            }
+            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_type </td> <td bgcolor=\"white\"> %c </td>  </tr>\n",inodo.i_type);
+            fprintf(graph, "    <tr> <td bgcolor=\"lightsteelblue\"> i_perm </td> <td bgcolor=\"white\"> %d </td>  </tr>\n",inodo.i_perm);
+            fprintf(graph, "   </table>>]\n\n");
+
+            //Creamos los bloques relacionados al inodo
+            for (int j = 0; j < 15; j++) 
+            {
+                port = 0;
+                if(inodo.i_block[j] != -1)
+                {
+                    //apuntamos al inicio del bitmap del superbloque de cada inodo
+                    fseek(fp,super.s_bm_block_start + inodo.i_block[j],SEEK_SET);
+
+                    //valor extraido de la lecutra
+                    buff = static_cast<char>(fgetc(fp));
+                    if(buff == '1')
+                    {//Bloque carpeta
+                        fseek(fp,super.s_block_start + static_cast<int>(sizeof(BLOQUECARPETAS))*inodo.i_block[j],SEEK_SET);
+                        fread(&carpeta,sizeof(BLOQUECARPETAS),1,fp);
+                        fprintf(graph, "    bloque_%d [shape=plaintext fontname=\"Century Gothic\" label=< \n",inodo.i_block[j]);
+                        fprintf(graph, "   <table bgcolor=\"seagreen\" border=\'0\'>\n");
+                        fprintf(graph, "    <tr> <td colspan=\'2\'><b>Folder block %d</b></td></tr>\n",inodo.i_block[j]);
+                        fprintf(graph, "    <tr> <td bgcolor=\"mediumseagreen\"> b_name </td> <td bgcolor=\"mediumseagreen\"> b_inode </td></tr>\n");
+                        
+                        //recorremos las 4 content de los bloques
+                        for(int c = 0;c < 4; c++)
+                        {
+                            fprintf(graph, "    <tr> <td bgcolor=\"white\" > %s </td> <td bgcolor=\"white\"  port=\"f%d\"> %d </td></tr>\n",carpeta.b_content[c].b_name,port,carpeta.b_content[c].b_inodo);
+                            port++;
+                        }
+                        fprintf(graph, "   </table>>]\n\n");
+
+                        //Relacion de bloques a inodos
+                        for(int c = 0; c < 4; c++)
+                        {
+                            //buscamos el tipo de bloque de carpetas
+                            if(carpeta.b_content[c].b_inodo !=-1)
+                            {
+                                if(strcmp(carpeta.b_content[c].b_name,".")!=0 && strcmp(carpeta.b_content[c].b_name,"..")!=0)
+                                    fprintf(graph, "    bloque_%d:f%d -> inodo_%d;\n",inodo.i_block[j],c,carpeta.b_content[c].b_inodo);
+                            }
+                        }
+                    }else if(buff == '2')
+                    {//Bloque archivo
+                        //apuntamos al inodo de cada bloque de archivos
+                        fseek(fp,super.s_block_start + static_cast<int>(sizeof(BLOQUEARCHIVOS))*inodo.i_block[j],SEEK_SET);
+                        fread(&archivo,sizeof(BLOQUEARCHIVOS),1,fp);
+
+                        //llenamos la info con los inodos del bloque
+                        fprintf(graph, "    bloque_%d [shape=plaintext fontname=\"Century Gothic\" label=< \n",inodo.i_block[j]);
+                        fprintf(graph, "   <table border=\'0\' bgcolor=\"sandybrown\">\n");
+                        fprintf(graph, "    <tr> <td> <b>File block %d</b></td></tr>\n",inodo.i_block[j]);
+                        fprintf(graph, "    <tr> <td bgcolor=\"white\"> %s </td></tr>\n",archivo.b_content);
+                        fprintf(graph, "   </table>>]\n\n");
+
+                    }else if(buff == '3')
+                    {//Bloque apuntador
+                        //apuntador del super bloque en cada apuntador
+                        fseek(fp,super.s_block_start + static_cast<int>(sizeof(BLOQUEAPUNTADORES))*inodo.i_block[j],SEEK_SET);
+                        fread(&apuntador,sizeof(BLOQUEAPUNTADORES),1,fp);
+
+                        fprintf(graph, "    bloque_%d [shape=plaintext fontname=\"Century Gothic\" label=< \n",inodo.i_block[j]);
+                        fprintf(graph, "   <table border=\'0\' bgcolor=\"khaki\">\n");
+                        fprintf(graph, "    <tr> <td> <b>Pointer block %d</b></td></tr>\n",inodo.i_block[j]);
+                        
+                        //recorremos los apuntadores
+                        for(int a = 0; a < 16; a++){
+                            fprintf(graph, "    <tr> <td bgcolor=\"white\" port=\"f%d\">%d</td> </tr>\n",port,apuntador.b_pointers[a]);
+                            port++;
+                        }
+                        fprintf(graph, "   </table>>]\n\n");
+
+                        //Bloques carpeta/archivos del bloque de apuntadores
+                        for (int x = 0; x < 16; x++) 
+                        {
+                            port = 0;
+                            //apuntadores
+                            if(apuntador.b_pointers[x] != -1)
+                            {
+                                //apuntamos al bimtap de los apuntadores
+                                fseek(fp,super.s_bm_block_start + apuntador.b_pointers[x],SEEK_SET);
+                                buff = static_cast<char>(fgetc(fp));
+
+                                if(buff == '1')
+                                {
+                                    //apuntamos al inicio de bloque de los apuntadores  
+                                    fseek(fp, super.s_block_start + static_cast<int>(sizeof(BLOQUECARPETAS))*apuntador.b_pointers[x],SEEK_SET);
+                                    fread(&carpeta,sizeof(BLOQUECARPETAS),1,fp);
+
+                                    fprintf(graph, "    bloque_%d [shape=plaintext fontname=\"Century Gothic\" label=< \n",apuntador.b_pointers[x]);
+                                    fprintf(graph, "   <table border=\'0\' bgcolor=\"seagreen\" >\n");
+                                    fprintf(graph, "    <tr> <td colspan=\'2\'> <b>Folder block %d</b> </td></tr>\n",apuntador.b_pointers[x]);
+                                    fprintf(graph, "    <tr> <td bgcolor=\"mediumseagreen\"> b_name </td> <td bgcolor=\"mediumseagreen\"> b_inode </td></tr>\n");
+                                    
+                                    //contenidos de las carpetas
+                                    for(int c = 0;c < 4; c++)
+                                    {
+                                        fprintf(graph, "    <tr> <td bgcolor=\"white\"> %s </td> <td bgcolor=\"white\" port=\"f%d\"> %d </td></tr>\n",carpeta.b_content[c].b_name,port,carpeta.b_content[c].b_inodo);
+                                        port++;
+                                    }
+                                    fprintf(graph, "   </table>>]\n\n");
+
+                                    //Relacion de bloques a inodos
+                                    for(int c = 0; c < 4; c++)
+                                    {
+                                        //entramos al contenido de cada carpeta
+                                        if(carpeta.b_content[c].b_inodo !=-1)
+                                        {
+                                            if(strcmp(carpeta.b_content[c].b_name,".")!=0 && strcmp(carpeta.b_content[c].b_name,"..")!=0)
+                                                fprintf(graph, "    bloque_%d:f%d -> inodo_%d;\n",apuntador.b_pointers[x],c,carpeta.b_content[c].b_inodo);
+                                        }
+                                    }
+
+                                //si entra al bloque de archivos
+                                }else if(buff == '2')
+                                {
+                                    //apuntamos al bloque de archivos
+                                    fseek(fp,super.s_block_start + static_cast<int>(sizeof(BLOQUEARCHIVOS))*apuntador.b_pointers[x],SEEK_SET);
+                                    fread(&archivo,sizeof(BLOQUEARCHIVOS),1,fp);
+
+                                    fprintf(graph, "    bloque_%d [shape=plaintext fontname=\"Century Gothic\" label=< \n",apuntador.b_pointers[x]);
+                                    fprintf(graph, "   <table border=\'0\' bgcolor=\"sandybrown\">\n");
+                                    fprintf(graph, "    <tr> <td> <b>File block %d</b></td></tr>\n",apuntador.b_pointers[x]);
+                                    fprintf(graph, "    <tr> <td bgcolor=\"white\"> %s </td></tr>\n",archivo.b_content);
+                                    fprintf(graph, "   </table>>]\n\n");
+                                }else if(buff == '3'){
+                                    
+                                }
+                            }
+                        }
+
+                        //Relacion de bloques apuntador a bloques archivos/carpetas
+                        for(int b = 0; b < 16; b++)
+                        {
+                            if(apuntador.b_pointers[b] != -1)
+                                fprintf(graph, "    bloque_%d:f%d -> bloque_%d;\n",inodo.i_block[j],b,apuntador.b_pointers[b]);
+                        }
+                    }
+                    //Relacion de inodos a bloques
+                    fprintf(graph, "    inodo_%d:f%d -> bloque_%d; \n",i,j,inodo.i_block[j]);
+                }
+            }
+        }
+        i++;
+    }
+
+    fprintf(graph,"\n\n}");
+    fclose(graph);
+
+    fclose(fp);
+
+    string comando = "dot -T"+extension+" grafica.dot -o "+ubicacion;
+    system(comando.c_str());
+    cout << "Reporte Tree generado con exito " << endl;
+}
+
 void comando_MKDIR(string auxPath, bool auxP){
     
     //almacenamiento variables
@@ -4335,6 +4639,237 @@ void comando_MKDIR(string auxPath, bool auxP){
             cout << "\033[31mERROR, necesita iniciar sesion para poder ejecutar este comando.\n\033[0m" << endl;
     }else
         cout << "\033[31mERROR, el nombre de la carpeta es mas grande de lo esperado.\n\033[0m" << endl;
+}
+
+void REPORTE_SUPERBLOQUE(string direccion, string destino, string extension, int start_super){
+    
+    //abrimos el disco
+    FILE* fp = fopen(direccion.c_str(),"r");
+
+    SUPERBLOQUE super;
+
+    //apuntamos al inicio del super bloque
+    fseek(fp,start_super,SEEK_SET);
+    fread(&super,sizeof (super),1,fp);
+
+    //abrimos el archivo de lectura
+    FILE *graph = fopen("grafica.dot","w");
+    fprintf(graph,"digraph G{\n");
+    fprintf(graph, "    nodo [shape=none, fontname=\"Century Gothic\" label=<");
+    fprintf(graph, "   <table border=\'1\' cellborder='1\' cellspacing=\'0\' bgcolor=\"Orange\">");
+    fprintf(graph, "    <tr> <td COLSPAN=\'2\'> <b>SUPERBLOQUE</b> </td></tr>\n");
+    fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> s_inodes_count </td> <td bgcolor=\"white\"> %d </td> </tr>\n",super.s_inodes_count);
+    fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> s_blocks_count </td> <td bgcolor=\"white\"> %d </td> </tr>\n",super.s_blocks_count);
+    fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> s_free_block_count </td> <td bgcolor=\"white\"> %d </td> </tr>\n",super.s_free_blocks_count);
+    fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> s_free_inodes_count </td> <td bgcolor=\"white\"> %d </td> </tr>\n",super.s_free_inodes_count);
+    
+    //esctructura de tiempo
+    struct tm *tm;
+    char fecha[100];
+    tm=localtime(&super.s_mtime);
+    strftime(fecha,100,"%d/%m/%y %H:%S",tm);
+    fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> s_mtime </td> <td bgcolor=\"white\"> %s </td></tr>\n",fecha);
+    tm=localtime(&super.s_umtime);
+    strftime(fecha,100,"%d/%m/%y %H:%S",tm);
+    fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> s_umtime </td> <td bgcolor=\"white\"> %s </td> </tr>\n",fecha);
+    fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> s_mnt_count </td> <td bgcolor=\"white\"> %d </td> </tr>\n",super.s_mnt_count);
+    fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> s_magic </td> <td bgcolor=\"white\"> %d </td> </tr>\n",super.s_magic);
+    fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> s_inode_size </td> <td bgcolor=\"white\"> %d </td> </tr>\n",super.s_inode_size);
+    fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> s_block_size </td> <td bgcolor=\"white\"> %d </td> </tr>\n",super.s_block_size);
+    fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> s_first_ino </td> <td bgcolor=\"white\"> %d </td> </tr>\n",super.s_first_ino);
+    fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> s_first_blo </td> <td bgcolor=\"white\"> %d </td> </tr>\n",super.s_first_blo);
+    fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> s_bm_inode_start </td> <td bgcolor=\"white\"> %d </td></tr>\n",super.s_bm_inode_start);
+    fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> s_bm_block_start </td> <td bgcolor=\"white\"> %d </td> </tr>\n",super.s_bm_block_start);
+    fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> s_inode_start </td> <td bgcolor=\"white\"> %d </td> </tr>\n",super.s_inode_start);
+    fprintf(graph, "    <tr> <td bgcolor=\"lightblue\"> s_block_start </td> <td bgcolor=\"white\"> %d </td> </tr>\n",super.s_block_start);
+    fprintf(graph, "   </table>>]\n");
+    fprintf(graph,"\n}");
+    fclose(graph);
+
+    fclose(fp);
+
+    string comando = "dot -T"+extension +" grafica.dot -o "+destino;
+    system(comando.c_str());
+    cout << "\033[94m ----- Reporte SUPERBLOQUE generado con exito de exito -----\n\033[0m" << endl;
+}
+
+void REPORTE_FILE(string direccion, string destino, string extension, string nombreRuta, int start_super,int n){
+    FILE *fp = fopen(direccion.c_str(),"r");
+
+    SUPERBLOQUE super;
+    INODOTABLA inodo;
+    BLOQUEARCHIVOS archivo;
+
+    //apuntador al inicio del super bloque
+    fseek(fp,start_super,SEEK_SET);
+    fread(&super,sizeof(SUPERBLOQUE),1,fp);
+
+    //apuntador en el incio de la tabla de inodos
+    fseek(fp,super.s_inode_start + static_cast<int>(sizeof(INODOTABLA))*n,SEEK_SET);
+    fread(&inodo,sizeof(INODOTABLA),1,fp);
+
+    //abrimos el archivo dot para escribirlo
+    FILE *graph = fopen("grafica.dot","w");
+    fprintf(graph,"digraph G{\n");
+    fprintf(graph, "    nodo [shape=none, fontname=\"Century Gothic\" label=<");
+    fprintf(graph, "   <table border=\'1\' cellborder='1\' cellspacing=\'0\' bgcolor=\"Orange\">");
+    fprintf(graph, "    <tr><td align=\"center\"> <b>%s</b> </td></tr>\n",nombreRuta.c_str());
+    fprintf(graph, "    <tr><td bgcolor=\"lightblue\">");
+    
+    //recorremos los 15 bloques
+    for (int i = 0; i < 15; i++) 
+    {
+        if(inodo.i_block[i] != -1)
+        {
+            if(i == 12)
+            {//Apuntador indirecto simple
+                BLOQUEAPUNTADORES apuntador;
+                fseek(fp,super.s_block_start + static_cast<int>(sizeof(BLOQUEAPUNTADORES))*inodo.i_block[i],SEEK_SET);
+                fread(&apuntador,sizeof(BLOQUEAPUNTADORES),1,fp);
+
+                //recorremos el bloque de carpetas
+                for(int j = 0; j < 16; j++)
+                {
+                    //recorremos los contenedores que estan disponibles
+                    if(apuntador.b_pointers[j] != -1){
+                        //apuntador inodos de las carpetas apuntadas
+                        fseek(fp,super.s_block_start + static_cast<int>(sizeof(BLOQUECARPETAS))*apuntador.b_pointers[j],SEEK_SET);
+                        fread(&archivo,sizeof(BLOQUEARCHIVOS),1,fp);
+                        fprintf(graph,"%s <br/>",archivo.b_content);
+                    }
+                }
+            }else if(i == 13){
+
+            }else if(i == 14){
+
+            }else{//Apuntadores directos
+                fseek(fp,super.s_block_start + static_cast<int>(sizeof(BLOQUECARPETAS))*inodo.i_block[i],SEEK_SET);
+                fread(&archivo,sizeof(BLOQUEARCHIVOS),1,fp);
+                fprintf(graph,"%s <br/>",archivo.b_content);
+            }
+        }
+    }
+    fprintf(graph, "    </td></tr>\n");
+    fprintf(graph, "   </table>>]\n");
+    fprintf(graph,"\n}");
+    fclose(graph);
+
+    fclose(fp);
+
+    string comando = "dot -T"+extension+" grafica.dot -o "+destino;
+    system(comando.c_str());
+    cout << "Reporte file generado con exito " << endl;
+}
+
+void REPORTE_LS(string direccion, string destino, string extension, int start_super, int n, USUARIO user, string name){
+    FILE *fp = fopen(direccion.c_str(),"rb+");
+
+    SUPERBLOQUE super;
+    INODOTABLA inodo;
+
+    //apuntamos al inicio del superbloque
+    fseek(fp,start_super,SEEK_SET);
+    fread(&super,sizeof(SUPERBLOQUE),1,fp);
+
+    //apuntador del bitmap de inodos
+    fseek(fp,super.s_inode_start + static_cast<int>(sizeof(INODOTABLA))*n,SEEK_SET);
+    fread(&inodo,sizeof(INODOTABLA),1,fp);
+
+    FILE *graph = fopen("grafica.dot","w");
+    fprintf(graph,"digraph G{\n\n");
+    fprintf(graph, "    nodo [ shape=none, fontname=\"Century Gothic\" \n");
+    fprintf(graph, "    label=< <table border=\'0\' cellborder='1\' cellspacing=\'0\' bgcolor=\"Orange\">\n");
+    fprintf(graph, "     <tr> <td><b>Permisos</b></td><td><b>Owner</b></td><td><b>Grupo</b></td><td><b>Size</b></td><td><b>Fecha</b></td><td><b>Hora</b></td><td><b>Tipo</b></td><td><b>Name</b></td> </tr>\n");
+
+    //permisos del i nodo de permisos
+    string auxPermisos = to_string(inodo.i_perm);
+    char propietario = auxPermisos[0];
+    char grupo = auxPermisos[1];
+    char otros = auxPermisos[2];
+    char permisos[50];
+
+    //Tipo de permisos para el propietario
+    if(propietario == '0')
+        strcpy(permisos,"---");
+    else if(propietario == '1')
+        strcpy(permisos,"--x");
+    else if(propietario == '2')
+        strcpy(permisos,"-w-");
+    else if(propietario == '3')
+        strcpy(permisos,"-wx");
+    else if(propietario == '4')
+        strcpy(permisos,"r--");
+    else if(propietario == '5')
+        strcpy(permisos,"r-x");
+    else if(propietario == '6')
+        strcpy(permisos,"rw-");
+    else if(propietario == '7')
+        strcpy(permisos,"rwx");
+
+    //Tipo de permisos para grupo
+    if(grupo == '0')
+        strcat(permisos," ---");
+    else if(grupo == '1')
+        strcat(permisos," --x");
+    else if(grupo == '2')
+        strcat(permisos," -w-");
+    else if(grupo == '3')
+        strcat(permisos," -wx");
+    else if(grupo == '4')
+        strcat(permisos," r--");
+    else if(grupo == '5')
+        strcat(permisos," r-x");
+    else if(grupo == '6')
+        strcat(permisos," rw-");
+    else if(grupo == '7')
+        strcat(permisos," rwx");
+
+    //Tipo de permisos para otros
+    if(otros == '0')
+        strcat(permisos," ---");
+    else if(otros == '1')
+        strcat(permisos," --x");
+    else if(otros == '2')
+        strcat(permisos," -w-");
+    else if(otros == '3')
+        strcat(permisos," -wx");
+    else if(otros == '4')
+        strcat(permisos," r--");
+    else if(otros == '5')
+        strcat(permisos," r-x");
+    else if(otros == '6')
+        strcat(permisos," rw-");
+    else if(otros == '7')
+        strcat(permisos," rwx");
+
+    //llenamos
+    fprintf(graph,"<tr> <td bgcolor=\"white\">%s</td> ",permisos);
+    fprintf(graph, "<td bgcolor=\"white\">%s</td>",user.username);
+    fprintf(graph, "<td bgcolor=\"white\">%s</td>",user.group);
+    fprintf(graph, "<td bgcolor=\"white\">%d</td>",inodo.i_size);
+
+    struct tm *tm;
+    char fecha[100];
+    tm=localtime(&inodo.i_atime);
+    strftime(fecha,100,"%d/%m/%y",tm);
+    fprintf(graph, "<td bgcolor=\"white\">%s</td>",fecha);
+    strftime(fecha,100,"%H:%S",tm);
+    fprintf(graph,"<td bgcolor=\"white\">%s</td>",fecha);
+    if(inodo.i_type == '0')
+        fprintf(graph,"<td bgcolor=\"white\">%s</td>","Carpeta");
+    else if(inodo.i_type == '1')
+        fprintf(graph,"<td bgcolor=\"white\">%s</td>","Archivo");
+    fprintf(graph, "<td bgcolor=\"white\">%s</td> </tr>\n",name.c_str());
+
+    fprintf(graph, "    </table>>]\n");
+    fprintf(graph,"\n}");
+    fclose(graph);
+
+    fclose(fp);
+
+    string comando = "dot -T"+extension+" grafica.dot -o "+destino;
+    system(comando.c_str());
+    cout << "Reporte ls generado con exito " << endl;
 }
 
 // -- Ejecucion comando MKFILE --
@@ -4504,7 +5039,7 @@ void comando_RMUSR(string usr){
     if(flag_login)
     {
         if(actualSesion.id_user == 1 && actualSesion.id_grp == 1)
-        {//Usuario root
+        {//USUARIO root
             if(buscarUsuario(usr)){
                 eliminarUsuario(usr);
             }else
@@ -4537,7 +5072,7 @@ void comando_MKUSR(string auxUsr, string auxPass, string auxGrupo){
                 if(flag_login)
                 {
                     if(actualSesion.id_user == 1 && actualSesion.id_grp == 1)
-                    {//Usuario root
+                    {//USUARIO root
                         if(buscarGrupo(group) != -1)
                         {
                             if(!buscarUsuario(user))
@@ -4545,7 +5080,7 @@ void comando_MKUSR(string auxUsr, string auxPass, string auxGrupo){
                                 int id = buscarId_usr();
                                 string datos = to_string(id) + ",U,"+group+","+user+","+pass+"\n";
                                 agregarUsuario_TXT(datos);
-                                cout << "Usuario creado con exito " << endl;
+                                cout << "USUARIO creado con exito " << endl;
                                 //Guardamos el registro en el journal si es un sistema EXT3
                                 if(actualSesion.tipo_sistema ==3)
                                 {
@@ -4578,7 +5113,7 @@ void comando_MKUSR(string auxUsr, string auxPass, string auxGrupo){
 void comando_RMGRP(string name){
     string nombreGrupo = name;
     if(flag_login){
-        if(actualSesion.id_user == 1 && actualSesion.id_grp == 1){//Usuario root
+        if(actualSesion.id_user == 1 && actualSesion.id_grp == 1){//USUARIO root
             int grupo = buscarGrupo(nombreGrupo);
             if(grupo != -1){
                 eliminarGrupo(nombreGrupo);
@@ -4596,7 +5131,7 @@ void comando_MKGRP(string name){
 
     if(flag_login)
     {
-        if(actualSesion.id_user == 1 && actualSesion.id_grp == 1)//Usuario root
+        if(actualSesion.id_user == 1 && actualSesion.id_grp == 1)//USUARIO root
         {
             if(nombreGrupo.length() <= 10)
             {
@@ -4832,6 +5367,32 @@ string SplitCExec (const string& str) {
   return var.substr(0, found1);
 }
 
+string obtener_Directorio(string direccion){
+    string aux = direccion;
+    string delimiter = "/";
+    size_t pos = 0;
+    string res = "";
+    while((pos = aux.find(delimiter))!=string::npos){
+        res += aux.substr(0,pos)+"/";
+        aux.erase(0,pos + delimiter.length());
+    }
+    return string(res);
+}
+
+string obtener_nombreArchivo(string direccion){
+    string aux = direccion;
+    string delimiter = "/";
+    size_t pos = 0;
+    string res = "";
+    while((pos = aux.find(delimiter))!=string::npos){
+        aux.erase(0,pos + delimiter.length());
+    }
+    delimiter = ".";
+    pos = aux.find(delimiter);
+    res = aux.substr(0,pos);
+    return string(res);
+}
+
 //-- Borrar disco (RMdisk) --
 int BorrarDisco(string path){
     if(remove(path.c_str()) != 0 )
@@ -4950,18 +5511,37 @@ void RMDISK(vector<string> datos){
         }else{
             string coman = minusculas(tipoP.at(0));
             string datoComan = tipoP.at(2);
+
             if (coman == "-path")
             {
+                string uno;
+                int num = -1;
                 string ident = "\"";
                 if(strstr(datoComan.c_str(), ident.c_str())){
-                    string uno = SplitCExec(datoComan);
+                    uno = SplitCExec(datoComan);
                     uno = path + uno;
-                    BorrarDisco(uno);
+                    num = BorrarDisco(uno);
 
                 }else{
-                    datoComan = path + datoComan;
-                    BorrarDisco(datoComan);
+                    uno = path + datoComan;
+                    num = BorrarDisco(uno);
                 }
+
+                int tamanioMount = Arreglomount.size();
+
+                if (num == 0)
+                {
+                    for (int i = 0; i < tamanioMount; i++)
+                    {
+                        if (uno == Arreglomount[i].direccion)
+                        {
+                            fdisk_desmontar(Arreglomount[i].id);
+                        }
+                        
+                    }
+                    
+                }
+                
             }
             
         }
@@ -5102,9 +5682,9 @@ void FDISK(vector<string> datos){
 
 // -- PAUSE --
 void PAUSE(vector<string> datos){
-    cout << "estamos en pause" << endl;
-    
-    
+    int pause;
+    cout << "\n++++++   PAUSAMOS ++++++ (presione cualquier tecla para continuar)\n" << endl;
+    pause = cin.get();
 }
 
 // -- MOUNT --
@@ -5634,7 +6214,7 @@ void REPORTES(vector<string> datos){
     string auxPath = "";
     string auxName = "";
     string auxId = "";
-    string auxRuta = "";
+    string auxRuta_file = "";
     bool auxP = false;
 
     for (int i = 1; i < datos.size(); i++)
@@ -5667,7 +6247,15 @@ void REPORTES(vector<string> datos){
                 auxId = datoComan;
             }else if (coman == "-ruta")
             {
-                auxRuta = datoComan;
+                string ident = "\"";
+                if(strstr(datoComan.c_str(), ident.c_str())){
+                    string uno = SplitCExec(datoComan);
+                    auxRuta_file = uno; 
+                    crearVerificar_rutas(uno);
+                }else{
+                    auxRuta_file = datoComan;
+                    crearVerificar_rutas(datoComan);
+                }
             }else{
                 cout << "\033[94mERROR, no es comando valido\033[0m" << endl;
                 break;
@@ -5707,12 +6295,12 @@ void REPORTES(vector<string> datos){
                 int index = buscarParticionP_E(direccion, nombre);
                 if(index != -1)
                 {//Primaria|Extendida
-                    MBR masterboot;
+                    MBR mbr;
                     SUPERBLOQUE super;
                     FILE *fp = fopen(direccion.c_str(),"rb+");
 
-                    fread(&masterboot,sizeof(MBR),1,fp);
-                    fseek(fp,masterboot.MBR_partition[index].part_start,SEEK_SET);
+                    fread(&mbr,sizeof(MBR),1,fp);
+                    fseek(fp,mbr.MBR_partition[index].part_start,SEEK_SET);
                     fread(&super,sizeof(SUPERBLOQUE),1,fp);
                     fclose(fp);
 
@@ -5721,12 +6309,13 @@ void REPORTES(vector<string> datos){
                     int index = buscarParticion_Logica(direccion, nombre);
                     if(index != -1)
                     {
-                        EBR extendedBoot;
+                        EBR ebr;
                         SUPERBLOQUE super;
                         FILE *fp = fopen(direccion.c_str(),"rb+");
 
+                        //apuntamos a la particion
                         fseek(fp,index,SEEK_SET);
-                        fread(&extendedBoot,sizeof(EBR),1,fp);
+                        fread(&ebr,sizeof(EBR),1,fp);
                         fread(&super,sizeof(SUPERBLOQUE),1,fp);
                         fclose(fp);
 
@@ -5759,14 +6348,16 @@ void REPORTES(vector<string> datos){
             {
                 int index = buscarParticionP_E(direccion, nombre);
                 if(index != -1){//Primaria|Extendida
-                    MBR masterboot;
+                    MBR mbr;
                     SUPERBLOQUE super;
                     FILE *fp = fopen(direccion.c_str(),"rb+");
-                    fread(&masterboot,sizeof(MBR),1,fp);
-                    fseek(fp,masterboot.MBR_partition[index].part_start,SEEK_SET);
+
+                    //apuntamos a la particion
+                    fread(&mbr,sizeof(MBR),1,fp);
+                    fseek(fp,mbr.MBR_partition[index].part_start,SEEK_SET);
                     fread(&super,sizeof(SUPERBLOQUE),1,fp);
                     fclose(fp);
-                    REPORTE_JOURNALING(direccion, auxPath, extension, masterboot.MBR_partition[index].part_start);
+                    REPORTE_JOURNALING(direccion, auxPath, extension, mbr.MBR_partition[index].part_start);
                 }
             }else{
                 cout << "\033[94mError, no se monto la particion, no se encuentra id\033[0m" << endl;
@@ -5792,26 +6383,30 @@ void REPORTES(vector<string> datos){
 
             if (flagId)
             {
-                int index = buscarParticionP_E(direccion, nombre);
-                if(index != -1)
+                int indicadorParticion = buscarParticionP_E(direccion, nombre);
+                if(indicadorParticion != -1)
                 {//Primaria|Extendida
-                    MBR masterboot;
+                    MBR mbr;
                     SUPERBLOQUE super;
                     FILE *fp = fopen(direccion.c_str(),"rb+");
-                    fread(&masterboot,sizeof(MBR),1,fp);
-                    fseek(fp,masterboot.MBR_partition[index].part_start,SEEK_SET);
+
+                    //apuntamos a la particion
+                    fread(&mbr, sizeof(MBR), 1, fp);
+                    fseek(fp, mbr.MBR_partition[indicadorParticion].part_start, SEEK_SET);
                     fread(&super,sizeof(SUPERBLOQUE),1,fp);
                     fclose(fp);
                     REPORTE_BLOQUES(direccion, auxPath, extension,super.s_bm_block_start,super.s_block_start,super.s_inode_start);
                 }else{//Logica
-                    int index = buscarParticion_Logica(direccion, nombre);
-                    if(index != -1)
+                    int indicadorParticion = buscarParticion_Logica(direccion, nombre);
+                    if(indicadorParticion != -1)
                     {
-                        EBR extendedBoot;
+                        EBR ebr;
                         SUPERBLOQUE super;
                         FILE *fp = fopen(direccion.c_str(),"rb+");
-                        fseek(fp,index,SEEK_SET);
-                        fread(&extendedBoot,sizeof(EBR),1,fp);
+
+                        //apuntamos a la particon
+                        fseek(fp,indicadorParticion,SEEK_SET);
+                        fread(&ebr,sizeof(EBR),1,fp);
                         fread(&super,sizeof(SUPERBLOQUE),1,fp);
                         fclose(fp);
                         REPORTE_BLOQUES(direccion, auxPath, extension,super.s_bm_block_start,super.s_block_start,super.s_inode_start);
@@ -5842,32 +6437,38 @@ void REPORTES(vector<string> datos){
 
             if (flagId)
             {
-                int index = buscarParticionP_E(direccion, nombre);
-                if(index != -1)
+                int indicadorParticion = buscarParticionP_E(direccion, nombre);
+                if(indicadorParticion != -1)
                 {//Primaria|Extendida
                     MBR mbr;
                     SUPERBLOQUE super;
                     FILE *fp = fopen(direccion.c_str(),"rb+");
+
+                    //apuntamos a la direccion
                     fread(&mbr, sizeof(MBR), 1, fp);
-                    fseek(fp, mbr.MBR_partition[index].part_start,SEEK_SET);
+                    fseek(fp, mbr.MBR_partition[indicadorParticion].part_start,SEEK_SET);
                     fread(&super,sizeof(SUPERBLOQUE),1,fp);
                     fclose(fp);
                     REPORTE_BM_INODE(direccion, auxPath, super.s_bm_inode_start,super.s_inodes_count);
                 }else{//Logica
-                    int index = buscarParticion_Logica(direccion, nombre);
-                    if(index != -1){
-                        EBR extendedBoot;
+
+                    int indicadorParticion = buscarParticion_Logica(direccion, nombre);
+                    if(indicadorParticion != -1)
+                    {
+                        EBR ebr;
                         SUPERBLOQUE super;
                         FILE *fp = fopen(direccion.c_str(),"rb+");
-                        fseek(fp,index,SEEK_SET);
-                        fread(&extendedBoot,sizeof(EBR),1,fp);
+
+                        //apuntamos a la particion
+                        fseek(fp,indicadorParticion,SEEK_SET);
+                        fread(&ebr,sizeof(EBR),1,fp);
                         fread(&super,sizeof(SUPERBLOQUE),1,fp);
                         fclose(fp);
                         REPORTE_BM_INODE(direccion, auxPath,super.s_bm_inode_start,super.s_inodes_count);
                     }
                 }
             }else{
-                cout << "\033[94mError, no se monto la particion\033[0m" << endl;
+                cout << "\033[91mError, no se monto la particion\033[0m" << endl;
             }
             
         }else if (auxName == "bm_block")
@@ -5875,6 +6476,7 @@ void REPORTES(vector<string> datos){
             string extension = ObtenerExtension(auxPath);
             string direccion = "";
             string nombre = "";
+
             //bandera del ID
             bool flagId = false;
 
@@ -5891,26 +6493,38 @@ void REPORTES(vector<string> datos){
 
             if (flagId)
             {
-                int index = buscarParticionP_E(direccion, nombre);
-                if(index != -1){//Primaria|Extendida
+                //buscamos particiones
+                int indicadorParticion = buscarParticionP_E(direccion, nombre);
+                if(indicadorParticion != -1)
+                {//Primaria|Extendida
                     MBR mbr;
                     SUPERBLOQUE super;
+
+                    //abrimo la direccion
                     FILE *fp = fopen(direccion.c_str(),"rb+");
+
+                    //apuntador de la particion
                     fread(&mbr, sizeof(MBR), 1, fp);
-                    fseek(fp, mbr.MBR_partition[index].part_start, SEEK_SET);
+                    fseek(fp, mbr.MBR_partition[indicadorParticion].part_start, SEEK_SET);
                     fread(&super,sizeof(SUPERBLOQUE),1,fp);
                     fclose(fp);
                     REPORTE_BM_INODE(direccion, auxPath, super.s_bm_block_start,super.s_blocks_count);
+
                 }else{//Logica
-                    int index = buscarParticion_Logica(direccion, nombre);
-                    if(index != -1){
+                    int indicadorParticion = buscarParticion_Logica(direccion, nombre);
+
+                    if(indicadorParticion != -1)
+                    {
                         EBR ebr;
                         SUPERBLOQUE super;
                         FILE *fp = fopen(direccion.c_str(),"rb+");
-                        fseek(fp,index,SEEK_SET);
+
+                        //apuntamos a la particion
+                        fseek(fp,indicadorParticion,SEEK_SET);
                         fread(&ebr, sizeof(EBR), 1, fp);
                         fread(&super,sizeof(SUPERBLOQUE),1,fp);
                         fclose(fp);
+
                         REPORTE_BM_INODE(direccion, auxPath, super.s_bm_block_start,super.s_blocks_count);
                     }
                 }
@@ -5918,9 +6532,237 @@ void REPORTES(vector<string> datos){
             {
                 cout << "\033[94mError, no se monto la particion\033[0m" << endl;
             }
+        }else if (auxName == "tree")
+        {
+            //obtiene extension
+            string extension = ObtenerExtension(auxPath);
+            string auxAuxPath = "";
+            string nombre = "";
+
+            //bandera del ID
+            bool flagId = false;
+
+            //obtenemos datos para ejecutar los siguientes comandos
+            for (int i = 0; i < Arreglomount.size(); i++)
+            {
+                if (auxId == Arreglomount[i].id)
+                {
+                    auxAuxPath = Arreglomount[i].direccion;
+                    nombre = Arreglomount[i].nombre;
+                    flagId = true;
+                    break;
+                }
+            }
+
+            if (flagId)
+            {
+                //encontramos las particiones
+                int indicadorParticion = buscarParticionP_E(auxAuxPath, nombre);
+                string destino = obtener_Directorio(auxPath) + obtener_nombreArchivo(auxPath) + ".pdf";
+                
+                //si no existe la particion
+                if(indicadorParticion != -1)
+                {
+                    //abrimos las rutas
+                    MBR mbr;
+                    FILE *fp = fopen(auxAuxPath.c_str(),"rb+");
+
+                    //colocamos el puntero en el inicio de las particiones
+                    fread(&mbr, sizeof(MBR), 1, fp);
+                    fseek(fp, mbr.MBR_partition[indicadorParticion].part_start, SEEK_SET);
+                    fclose(fp);
+
+                    REPORTE_TREE(auxAuxPath, auxPath, extension, mbr.MBR_partition[indicadorParticion].part_start);
+                }else{
+                    int indicadorParticion = buscarParticion_Logica(auxAuxPath, nombre);
+                    if(indicadorParticion != -1)
+                    {//si esta libre realiza el reporte
+                        EBR ebr;
+                        FILE *fp = fopen(auxAuxPath.c_str(),"rb+");
+                        fseek(fp,indicadorParticion,SEEK_SET);
+                        fread(&ebr,sizeof(EBR),1,fp);
+                        int start = static_cast<int>(ftell(fp));
+                        fclose(fp);
+                        REPORTE_TREE(auxAuxPath, auxPath, extension,start);
+                    }
+                }
+            }
+            
+        }else if (auxName == "sb")
+        {
+            //obtiene extension
+            string extension = ObtenerExtension(auxPath);
+            string auxAuxPath = "";
+            string nombre = "";
+
+            //bandera del ID
+            bool flagId = false;
+
+            //obtenemos datos para ejecutar los siguientes comandos
+            for (int i = 0; i < Arreglomount.size(); i++)
+            {
+                if (auxId == Arreglomount[i].id)
+                {
+                    auxAuxPath = Arreglomount[i].direccion;
+                    nombre = Arreglomount[i].nombre;
+                    flagId = true;
+                    break;
+                }
+            }
+
+            if (flagId)
+            {
+                int indicadorParticion = buscarParticionP_E(auxAuxPath, nombre);
+                if(indicadorParticion != -1){//Primaria|Extendida
+                    MBR mbr;
+                    FILE *fp = fopen(auxAuxPath.c_str(),"rb+");
+
+                    //apuntamos a la particion
+                    fread(&mbr,sizeof(MBR),1,fp);
+                    fseek(fp,mbr.MBR_partition[indicadorParticion].part_start,SEEK_SET);
+                    fclose(fp);
+                    REPORTE_SUPERBLOQUE(auxAuxPath, auxPath, extension, mbr.MBR_partition[indicadorParticion].part_start);
+                }else{
+                    int indicadorParticion = buscarParticion_Logica(auxAuxPath, nombre);
+                    if(indicadorParticion != -1){
+                        EBR ebr;
+                        FILE *fp = fopen(auxAuxPath.c_str(),"rb+");
+
+                        //apuntamos a la particion
+                        fseek(fp,indicadorParticion,SEEK_SET);
+                        fread(&ebr,sizeof(EBR),1,fp);
+                        int inicio = static_cast<int>(ftell(fp));
+                        fclose(fp);
+                        REPORTE_SUPERBLOQUE(auxAuxPath, auxPath, extension, inicio);
+                    }
+                }
+            }
+            
+        }else if (auxName == "file")
+        {
+            //obtiene extension
+            string extension = ObtenerExtension(auxPath);
+            string auxAuxPath = "";
+            string nombre = "";
+
+            //bandera del ID
+            bool flagId = false;
+
+            //obtenemos datos para ejecutar los siguientes comandos
+            for (int i = 0; i < Arreglomount.size(); i++)
+            {
+                if (auxId == Arreglomount[i].id)
+                {
+                    auxAuxPath = Arreglomount[i].direccion;
+                    nombre = Arreglomount[i].nombre;
+                    flagId = true;
+                    break;
+                }
+            }
+
+
+            if (flagId)
+            {
+                int indicadorParticion = buscarParticionP_E(auxAuxPath, nombre);
+                if(indicadorParticion != -1)
+                {
+                    MBR mbr;
+                    char auxRuta[500];
+                    //asignamos el valor de aux ruta al archivo de lectura
+                    strcpy(auxRuta, auxRuta_file.c_str());
+
+                    //abrimos disco
+                    FILE *fp = fopen(auxAuxPath.c_str(),"rb+");
+                    fread(&mbr, sizeof(MBR),1,fp);
+                    int existeCarpeta = buscar_CarpetaAr(fp, auxRuta);
+
+                    //existencia carpeta
+                    if(existeCarpeta != -1)
+                    {
+                        char nombreRuta[50];
+                        char auxRuta[400];
+
+                        //apuntador de la carpeta
+                        strcpy(auxRuta, auxRuta_file.c_str());
+                        strcpy(nombreRuta, basename(auxRuta));
+                        REPORTE_FILE(auxAuxPath, auxPath, extension, nombreRuta, mbr.MBR_partition[indicadorParticion].part_start,existeCarpeta);
+                    }
+                    fclose(fp);
+                }
+            }else
+            {
+                cout << "\033[91mERROR, No se encontro ID del moun.\033[0m" << endl;
+            }
+        }else if (auxName == "ls")
+        {
+            //obtiene extension
+            string extension = ObtenerExtension(auxPath);
+            string auxAuxPath = "";
+            string nombre = "";
+
+            //bandera del ID
+            bool flagId = false;
+
+            //obtenemos datos para ejecutar los siguientes comandos
+            for (int i = 0; i < Arreglomount.size(); i++)
+            {
+                if (auxId == Arreglomount[i].id)
+                {
+                    auxAuxPath = Arreglomount[i].direccion;
+                    nombre = Arreglomount[i].nombre;
+                    flagId = true;
+                    break;
+                }
+            }
+
+            if (flagId)
+            {
+                int index = buscarParticionP_E(auxAuxPath, nombre);
+                if(index != -1)
+                {
+                    MBR mbr;
+                    SUPERBLOQUE super;
+                    INODOTABLA inodo;
+                    char auxRuta[500];
+
+                    strcpy(auxRuta, auxRuta_file.c_str());
+
+                    //abrimos la ruta de direccion
+                    FILE *fp = fopen(auxAuxPath.c_str(),"rb+");
+                    fread(&mbr,sizeof(MBR),1,fp);
+                    fseek(fp,mbr.MBR_partition[index].part_start,SEEK_SET);
+                    fread(&super,sizeof(SUPERBLOQUE),1,fp);
+
+                    int existe = buscar_CarpetaAr(fp, auxRuta);
+                    if(existe != -1)
+                    {
+                        char nombre[50];
+                        char auxRuta[400];
+
+                        //asigmamos la ruta que viene en el comando ruta
+                        strcpy(auxRuta, auxRuta_file.c_str());
+                        strcpy(nombre,basename(auxRuta));
+
+                        //apuntador del bimap de inodos principal
+                        fseek(fp,super.s_inode_start + static_cast<int>(sizeof(INODOTABLA))*existe,SEEK_SET);
+                        fread(&inodo,sizeof(INODOTABLA),1,fp);
+
+                        //obtenemos el usuario del creado
+                        USUARIO user = obtener_usuario(auxAuxPath, mbr.MBR_partition[index].part_start, inodo.i_uid);
+                        REPORTE_LS(auxAuxPath, auxPath, extension,mbr.MBR_partition[index].part_start,existe,user, string(nombre));
+                    }
+                    else
+                        cout << "ERROR: No se encuentra la ruta " << endl;
+                    fclose(fp);
+                }else{
+
+                }
+            }else
+            {
+                cout << "\033[91mERROR, no se recibio algun parametro obligatorio.\033[0m" << endl;
+            }
         }
-    }else
-    {
+    }else{
         cout << "\033[94mERROR, no se recibio algun parametro obligatorio.\033[0m" << endl;
     }
 }
