@@ -1,0 +1,9 @@
+digraph G{
+
+    nodo [ shape=none, fontname="Century Gothic" 
+    label=< <table border='0' cellborder='1' cellspacing='0' bgcolor="Orange">
+     <tr> <td><b>Permisos</b></td><td><b>Owner</b></td><td><b>Grupo</b></td><td><b>Size</b></td><td><b>Fecha</b></td><td><b>Hora</b></td><td><b>Tipo</b></td><td><b>Name</b></td> </tr>
+<tr> <td bgcolor="white">rw- rw- r--</td> <td bgcolor="white">root</td><td bgcolor="white">root</td><td bgcolor="white">0</td><td bgcolor="white">17/12/21</td><td bgcolor="white">19:38</td><td bgcolor="white">Carpeta</td><td bgcolor="white">faseU</td> </tr>
+    </table>>]
+
+}
