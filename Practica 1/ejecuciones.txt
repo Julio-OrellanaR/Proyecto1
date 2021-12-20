@@ -13,18 +13,29 @@ source /home/julio-or/Documentos/Lab archivos/Proyecto1/Practica 1/archivos de c
 
 source /home/julio-or/Documentos/Lab archivos/Proyecto1/Practica 1/script_llenado.sql
 
+** usuarios **
+
+
 
 ** consultas ***
 
-1) select count(idProyecto) from project where YEAR(start_actual_isodate) = 2011;
-7) select  project_title, MIN(total_commitments) AS Proyecto_menos_costoso from project group By project_title order by Proyecto_menos_costoso asc limit 1;
+1) select count(idProyecto) as Proyectos_iniciaron_2011 from project where YEAR(start_actual_isodate) = 2011;
 
-7) select  project_title AS Proyecto_menos_costoso from project order by total_commitments asc limit 1;
+2) SELECT project_title, max(DATEDIFF(end_actual_isodate, start_actual_isodate)) AS Proyecto_mayor_D_dias FROM  project  WHERE start_actual_isodate is not null and end_actual_isodate is not null group by project_title order by Proyecto_mayor_D_dias desc limit 1;
 
-8) select project_title as Proyectos_Mas_Costosos from `project` order by `total_commitments` desc limit 5;
+3) SELECT project_title, max(DATEDIFF(end_actual_isodate, start_actual_isodate)) AS Proyecto_menor_D_dias FROM  project  WHERE start_actual_isodate is not null and end_actual_isodate is not null group by project_title order by Proyecto_menor_D_dias asc limit 1;
 
-8) select project_title, MAX(total_commitments) AS Proyectos_Mas_Costosos from `project` group BY project_title order by Proyectos_Mas_Costosos desc limit 5;
-
-4) select recipients_iso3, COUNT(recipients) as Pais_mas_Proyectos from project group BY recipients_iso3 order by Pais_mas_Proyectos desc limit 5;
+4) select recipients_iso3, COUNT(recipients) as Paises_con_mas_Proyectos from project group BY recipients_iso3 order by Paises_con_mas_Proyectos desc limit 5;
 
 5) select recipients_iso3, COUNT(recipients) as Pais_menos_proyectos from project group BY recipients_iso3 order by Pais_menos_proyectos ASC limit 5;
+
+6) select project_title, total_commitments as Proyecto_mas_costoso from project order by total_commitments DESC limit 1;
+
+7) select  project_title, MIN(total_commitments) AS Proyecto_menos_costoso_precio from project group By project_title order by Proyecto_menos_costoso_precio asc limit 1;
+
+8) select project_title, MAX(total_commitments) AS Proyectos_Mas_Costosos_precio from `project` group BY project_title order by Proyectos_Mas_Costosos_precio desc limit 5;
+
+9) select SUM(total_commitments) as Costo_tota_Proyectos from project;
+
+10) select transaction.id_transaction,transaction.transaction_isodate,transaction.transaction_value from transaction join project on transaction.idProject = idProject where project.project_title  like '%RI-East Africa Public Health Laboratory Networking Project%' order by transaction.transaction_value desc limit 3;
+
